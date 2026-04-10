@@ -344,8 +344,8 @@ tr:hover td{background:var(--warm);}
     <button class="btn-login" onclick="doLogin()">SIGN IN</button>
     <div class="login-err" id="li-err"></div>
     <p style="color:rgba(255,248,240,0.25);font-size:11px;margin-top:18px;font-family:var(--font-mono);">
-      Admin: admin@kfc1416.ca / admin123<br>
-      Staff: firstname@kfc1416.ca / staff123
+      Admin: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="38595c55515678535e5b090c090e165b59">[email&#160;protected]</a> / admin123<br>
+      Staff: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="12747b6061667c737f7752797471232623243c7173">[email&#160;protected]</a> / staff123
     </p>
   </div>
 </div>
@@ -378,7 +378,7 @@ tr:hover td{background:var(--warm);}
 <div id="toasts"></div>
 
 <!-- FIREBASE -->
-<script type="module">
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
          signOut, onAuthStateChanged }
@@ -443,46 +443,44 @@ function shortName(n){const p=n.split(',');return p.length>1?p[1].trim().split('
 window.doLogin = async function(){
   const email=document.getElementById('li-email').value.trim();
   const pass=document.getElementById('li-pass').value;
-  const err=document.getElementById('li-err');
-  err.textContent='';
+  const errEl=document.getElementById('li-err');
+  errEl.textContent='';
   try{
     const cred = await signInWithEmailAndPassword(auth,email,pass);
-    // role check
+    // Store the REAL Firebase UID - this is the Firestore doc key for availability
+    STATE.firebaseUid = cred.user.uid;
+    STATE.uid = cred.user.uid;
     const snap = await getDoc(doc(db,'users',cred.user.uid));
     if(snap.exists()){
       STATE.role=snap.data().role||'employee';
       STATE.user=snap.data();
-      STATE.uid=cred.user.uid;
     } else {
-      // fallback for seed admin
-      if(email==='admin@kfc1416.ca'){STATE.role='admin';STATE.user={name:'Mohamed Hedi Bouhoula',email};}
-      else {STATE.role='employee';STATE.user={name:email,email};}
-      STATE.uid=cred.user.uid;
+      STATE.role=email==='admin@kfc1416.ca'?'admin':'employee';
+      STATE.user={name:email,email};
     }
-    showApp();
+    await showApp();
   }catch(e){
-    // try demo fallback
+    // Admin demo fallback only
     if(email==='admin@kfc1416.ca'&&pass==='admin123'){
-      STATE.role='admin';STATE.user={name:'Mohamed Hedi Bouhoula',email};STATE.uid='demo_admin';
+      STATE.role='admin';STATE.user={name:'Mohamed Hedi Bouhoula',email};
+      STATE.uid='demo_admin';STATE.firebaseUid='demo_admin';
       await ensureSeedData();
-      showApp();
-    } else if(pass==='staff123'){
-      // find employee by email prefix
-      const prefix=email.split('@')[0].toLowerCase();
-      const emp=SEED_EMPLOYEES.find(e=>e.name.toLowerCase().includes(prefix)||e.id===prefix);
-      STATE.role='employee';
-      STATE.user={name:emp?emp.name:email,email,empId:emp?emp.id:null};
-      STATE.uid='demo_'+prefix;
-      showApp();
+      await showApp();
     } else {
-      err.textContent='Invalid credentials. Try admin@kfc1416.ca / admin123';
+      const code=e.code||'';
+      if(code.includes('user-not-found')||code.includes('invalid-credential'))
+        errEl.textContent='Account not found. Ask your manager to register you.';
+      else if(code.includes('wrong-password'))
+        errEl.textContent='Wrong password.';
+      else
+        errEl.textContent='Login failed. Check your email and password.';
     }
   }
 };
 
 window.doLogout = function(){
   signOut(auth).catch(()=>{});
-  STATE.user=null;STATE.role=null;STATE.uid=null;
+  STATE.user=null;STATE.role=null;STATE.uid=null;STATE.firebaseUid=null;STATE.myAvailData=null;
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
 };
@@ -541,9 +539,22 @@ async function loadAvailability(){
   try{
     const snap=await getDocs(collection(db,'availability_1416'));
     const avail={};
-    snap.docs.forEach(d=>{avail[d.id]=d.data();});
+    snap.docs.forEach(d=>{ avail[d.id]=d.data(); });
     STATE.availability=avail;
   }catch(e){ STATE.availability={}; }
+}
+
+// Load the current user's OWN availability doc (by real Firebase UID)
+async function loadMyAvailability(){
+  if(!STATE.firebaseUid) return;
+  try{
+    const snap=await getDoc(doc(db,'availability_1416', STATE.firebaseUid));
+    if(snap.exists()){
+      STATE.myAvailData = snap.data();       // {name, days, submitted, locked}
+    } else {
+      STATE.myAvailData = null;
+    }
+  }catch(e){ STATE.myAvailData=null; }
 }
 
 // ── SHOW APP ──
@@ -553,7 +564,12 @@ async function showApp(){
   appEl.style.display='flex';
   document.getElementById('header-user-label').textContent=
     (STATE.user?.name||STATE.user?.email||'')+ ' · '+(STATE.role==='admin'?'Admin':'Employee');
-  await Promise.all([loadEmployees(),loadProducts(),loadMessages(),loadSchedule(),loadAvailability()]);
+  if(STATE.role==='admin'){
+    await Promise.all([loadEmployees(),loadProducts(),loadMessages(),loadSchedule(),loadAvailability()]);
+  } else {
+    // Employee: load their own availability doc using their real Firebase UID
+    await Promise.all([loadSchedule(),loadMyAvailability()]);
+  }
   buildNav();
   navigate(STATE.role==='admin'?'dashboard':'my-schedule');
 }
@@ -934,22 +950,78 @@ function renderAvailability(){
   const empIds=Object.keys(avail);
   if(empIds.length===0) return `
     <div class="section-title">Availability</div>
-    <div class="section-sub">No availability submissions yet.</div>
-    <div class="card"><p style="color:var(--muted)">Employees haven't submitted their availability yet. They can do so from their portal.</p></div>`;
+    <div class="section-sub">No submissions yet.</div>
+    <div class="card"><p style="color:var(--muted)">No employees have submitted availability yet.</p></div>`;
 
+  // Summary table with unlock button per person
+  const tableRows = empIds.map(uid=>{
+    const a = avail[uid];
+    const name = a?.name||a?.email||uid;
+    const isLocked = a?.locked===true;
+    const date = a?.updatedAt||'—';
+    const daysAvail = DAYS.filter(d=>a?.days?.[d]?.available).map(d=>d.substring(0,3)).join(', ')||'None';
+    return `<tr>
+      <td><strong>${name}</strong></td>
+      <td style="font-size:12px">${daysAvail}</td>
+      <td>${date}</td>
+      <td>${isLocked
+        ? `<span style="color:#2ea84b;font-size:12px;font-weight:600">\u2705 Submitted</span>`
+        : `<span style="color:var(--muted);font-size:12px">In progress</span>`
+      }</td>
+      <td>${isLocked
+        ? `<button class="btn btn-sm btn-secondary" onclick="unlockAvail('${uid}')">\uD83D\uDD13 Reopen</button>`
+        : `<button class="btn btn-sm btn-danger" onclick="clearAvail('${uid}')">Clear</button>`
+      }</td>
+    </tr>`;
+  }).join('');
+
+  // Day-by-day grid
   const cols=DAYS.map(day=>{
     const emps=empIds.filter(uid=>avail[uid]?.days?.[day]?.available);
     return `<div class="avail-day">
       <div class="avail-day-name">${day.substring(0,3).toUpperCase()}</div>
-      ${emps.length?emps.map(uid=>`<div class="avail-emp">${avail[uid]?.name||uid}</div>`).join(''):'<div style="font-size:11px;color:var(--muted)">—</div>'}
+      ${emps.length?emps.map(uid=>`<div class="avail-emp">${avail[uid]?.name?.split(',')[0]||uid}</div>`).join(''):'<div style="font-size:11px;color:var(--muted)">—</div>'}
     </div>`;
   }).join('');
 
   return `
   <div class="section-title">Availability</div>
-  <div class="section-sub">${empIds.length} submissions</div>
-  <div class="avail-grid">${cols}</div>`;
+  <div class="section-sub">${empIds.length} submission(s) received</div>
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title">Submission Status</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Employee</th><th>Available Days</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Day-by-Day Overview</div>
+    <div class="avail-grid">${cols}</div>
+  </div>`;
 }
+
+// Admin: unlock a staff member's availability so they can resubmit
+window.unlockAvail = async function(uid){
+  try{
+    await updateDoc(doc(db,'availability_1416',uid),{locked:false,submitted:false});
+    STATE.availability[uid].locked=false;
+    STATE.availability[uid].submitted=false;
+    navigate('availability');
+    toast('Availability reopened for '+STATE.availability[uid].name,'success');
+  }catch(e){
+    toast('Error: '+e.message,'warning');
+  }
+};
+
+window.clearAvail = async function(uid){
+  if(!confirm('Clear this submission?'))return;
+  try{await deleteDoc(doc(db,'availability_1416',uid));}catch(e){}
+  delete STATE.availability[uid];
+  navigate('availability');
+  toast('Cleared');
+};
 
 // ── EXPIRY ──
 function renderExpiry(){
@@ -1116,8 +1188,41 @@ function renderMySchedule(){
 
 // ── MY AVAILABILITY ──
 function renderMyAvailability(){
-  const uid=STATE.uid||'demo';
-  const saved=STATE.availability[uid]||{};
+  const saved = STATE.myAvailData || {};
+  const isLocked = saved.locked === true;
+  const isSubmitted = saved.submitted === true;
+
+  // If locked (already submitted and admin has not reopened), show read-only view
+  if(isLocked){
+    const rows = DAYS.map(day=>{
+      const d = saved.days?.[day];
+      const avail = d?.available;
+      return `<div class="day-avail-row" style="opacity:0.8">
+        <label style="width:90px;font-weight:${avail?'600':'400'};color:${avail?'var(--charcoal)':'var(--muted)'}">
+          ${avail?'\u2705':'\u274c'} ${day.substring(0,3)}
+        </label>
+        ${avail?`<span style="font-family:var(--font-mono);font-size:12px">${d?.from||'--:--'} \u2014 ${d?.to||'--:--'}</span>`:'<span style="font-size:12px;color:var(--muted)">Not available</span>'}
+      </div>`;
+    }).join('');
+    return `
+    <div class="section-title">My Availability</div>
+    <div class="section-sub">Submitted \u2014 waiting for manager to review</div>
+    <div class="card" style="border-left:4px solid #2ea84b">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:10px 14px;background:rgba(46,168,75,0.08);border-radius:9px">
+        <span style="font-size:20px">\u2705</span>
+        <div>
+          <div style="font-weight:600;font-size:14px">Availability Submitted</div>
+          <div style="font-size:12px;color:var(--muted)">Submitted on ${saved.updatedAt||''}. Your manager will review it.</div>
+        </div>
+      </div>
+      ${rows}
+      <p style="margin-top:14px;font-size:12px;color:var(--muted);padding:10px;background:var(--warm);border-radius:8px">
+        \u{1F512} Your availability is locked. If you need to make changes, ask your manager to reopen it.
+      </p>
+    </div>`;
+  }
+
+  // Not yet submitted — show editable form
   const rows=DAYS.map(day=>{
     const d=saved?.days?.[day];
     return `<div class="day-avail-row">
@@ -1130,16 +1235,23 @@ function renderMyAvailability(){
 
   return `
   <div class="section-title">My Availability</div>
-  <div class="section-sub">Tell us when you can work</div>
+  <div class="section-sub">Fill in your availability then submit. You can only submit once.</div>
   <div class="card">
     ${rows}
-    <button class="btn btn-primary" style="margin-top:16px;width:100%" onclick="saveMyAvail()">Save Availability</button>
+    <button class="btn btn-primary" style="margin-top:16px;width:100%" onclick="saveMyAvail()">
+      \u{1F4BE} Save & Submit Availability
+    </button>
+    <p style="margin-top:10px;font-size:12px;color:var(--muted)">
+      \u26a0\ufe0f Once submitted, you cannot edit again unless your manager reopens it.
+    </p>
   </div>`;
 }
 
 function attachMyAvailHandlers(){
   window.saveMyAvail=async function(){
-    const uid=STATE.uid||'demo';
+    const uid = STATE.firebaseUid;
+    if(!uid || uid==='demo_admin'){toast('Cannot save: not logged in with a real account','warning');return;}
+
     const days={};
     DAYS.forEach(day=>{
       days[day]={
@@ -1148,10 +1260,25 @@ function attachMyAvailHandlers(){
         to:document.getElementById(`avt-${day}`)?.value||'17:00',
       };
     });
-    const data={name:STATE.user?.name||'',days,updated:new Date().toISOString()};
-    try{await setDoc(doc(db,'availability_1416',uid),data);}catch(e){}
-    STATE.availability[uid]=data;
-    toast('Availability saved!','success');
+
+    const data={
+      name: STATE.user?.name||STATE.user?.email||'',
+      email: STATE.user?.email||'',
+      days,
+      submitted: true,
+      locked: true,
+      updatedAt: new Date().toLocaleDateString('en-CA'),
+    };
+
+    try{
+      await setDoc(doc(db,'availability_1416', uid), data);
+      STATE.myAvailData = data;
+      toast('Availability submitted!','success');
+      navigate('my-availability');
+    }catch(err){
+      console.error('Firestore write error:',err);
+      toast('Error saving: '+err.message,'warning');
+    }
   };
 }
 
@@ -1193,18 +1320,4 @@ window.closeModal=function(){
 
 // ── TOAST ──
 window.toast=function(msg,type=''){
-  const el=document.createElement('div');
-  el.className='toast '+(type||'');
-  el.textContent=msg;
-  document.getElementById('toasts').appendChild(el);
-  setTimeout(()=>el.remove(),3000);
-};
-
-// ── CLICK OUTSIDE MODAL ──
-document.getElementById('modal-backdrop').addEventListener('click',function(e){
-  if(e.target===this) closeModal();
-});
-
-</script>
-</body>
-</html>
+  const el=document.createE
