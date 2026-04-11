@@ -163,19 +163,59 @@ tr:hover td{background:rgba(255,255,255,.02)}
 /* ── VACATION MODAL ── */
 .emp-vac-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .emp-vac-row:last-child{border-bottom:none}
+/* ── WEEK AVAILABILITY SELECTOR ── */
+.avail-week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:14px}
+.avail-week-day{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px 6px;text-align:center;cursor:pointer;transition:all .15s;user-select:none}
+.avail-week-day.on{background:rgba(34,197,94,.09);border-color:rgba(34,197,94,.3)}
+.avail-week-day .awn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;margin-bottom:4px}
+.avail-week-day .awd{font-size:11px;color:var(--light)}
+.week-select-bar{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding:12px 16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;flex-wrap:wrap}
+.week-select-bar label{font-size:11px;color:var(--light);letter-spacing:1.5px;text-transform:uppercase;font-weight:600;white-space:nowrap}
+.week-select-bar select,.week-select-bar input{flex:1;min-width:140px;padding:8px 12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--white);font-family:'Barlow',sans-serif;font-size:13px;outline:none}
+/* ── ORDER UPLOAD ── */
+.upload-zone{border:2px dashed rgba(255,255,255,.15);border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;position:relative;margin-bottom:20px}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--gold);background:rgba(245,166,35,.05)}
+.upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-zone .uz-icon{font-size:40px;margin-bottom:10px}
+.upload-zone p{font-size:14px;color:var(--light);margin-bottom:4px}
+.upload-zone small{font-size:11px;color:var(--mid)}
+/* ── REPLY STYLING ── */
+.msg-reply{background:rgba(59,130,246,.07);border-left:3px solid var(--blue);border-radius:6px;padding:10px 14px;margin-top:10px;font-size:13px;color:#7db3ff}
+.msg-reply-label{font-size:10px;color:var(--blue);letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:5px}
+/* ── ADMIN AVAIL SUBMIT ── */
+.admin-avail-submit{background:rgba(232,0,28,.06);border:1px solid rgba(232,0,28,.2);border-radius:12px;padding:20px;margin-bottom:20px}
 @media(max-width:768px){
   #mob-menu-btn{display:flex}
-  .sidebar{transform:translateX(-100%);z-index:100}
-  .main-content{margin-left:0}
+  .sidebar{transform:translateX(-100%);z-index:100;width:260px}
+  .main-content{margin-left:0;width:100%;max-width:100vw;overflow-x:hidden}
+  #app{width:100%;overflow-x:hidden}
   .week-grid{grid-template-columns:repeat(2,1fr)}
   .avail-grid{grid-template-columns:repeat(2,1fr)}
   .order-grid{grid-template-columns:1fr}
   .form-row{grid-template-columns:1fr}
-  .top-bar{padding:14px 16px 14px 64px}
-  .page{padding:16px}
+  .top-bar{padding:12px 12px 12px 60px}
+  .top-bar h1{font-size:18px}
+  .page{padding:12px}
   .stats-grid{grid-template-columns:1fr 1fr}
   table{font-size:12px}
-  th,td{padding:8px 10px}
+  th,td{padding:7px 8px}
+  .login-card{padding:32px 20px;margin:16px}
+  .modal-box{padding:24px 16px}
+  .card{padding:16px}
+  .filter-bar{gap:8px}
+  .filter-bar .btn{font-size:12px;padding:7px 12px}
+  .avail-card{padding:14px 12px}
+  .msg-item{padding:12px}
+  .stat-card{padding:16px 14px}
+  .stat-num{font-size:28px}
+  .week-select-bar{flex-direction:column;gap:8px}
+  .avail-week-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:400px){
+  .stats-grid{grid-template-columns:1fr}
+  .week-grid{grid-template-columns:1fr}
+  .avail-grid{grid-template-columns:1fr}
+  .avail-week-grid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -323,6 +363,48 @@ tr:hover td{background:rgba(255,255,255,.02)}
   </div>
 </div>
 
+<!-- REPLY TO EMPLOYEE MESSAGE -->
+<div class="modal-overlay" id="reply-modal">
+  <div class="modal-box" style="max-width:480px">
+    <button class="modal-close" onclick="closeM('reply-modal')">✕</button>
+    <div class="modal-title">↩️ Reply to Employee</div>
+    <div id="reply-orig" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:14px;margin-bottom:18px;font-size:13px;color:var(--lighter)"></div>
+    <input type="hidden" id="reply-msg-id">
+    <input type="hidden" id="reply-to-uid">
+    <div class="fg" style="margin-bottom:16px"><label>Your Reply</label><textarea id="reply-txt" style="padding:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--white);font-family:'Barlow',sans-serif;font-size:14px;resize:none;height:100px;outline:none;width:100%" placeholder="Type your reply..."></textarea></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center" onclick="sendReplyFixed()">📨 Send Reply</button>
+  </div>
+</div>
+
+<!-- RESET AVAILABILITY CONFIRMATION -->
+<div class="modal-overlay" id="reset-avail-modal">
+  <div class="modal-box" style="max-width:400px">
+    <button class="modal-close" onclick="closeM('reset-avail-modal')">✕</button>
+    <div class="modal-title">⚠️ Reset All Availability</div>
+    <p style="font-size:14px;color:var(--lighter);margin-bottom:18px">This will permanently delete <strong>all staff availability submissions</strong>. All staff will need to resubmit. This cannot be undone.</p>
+    <div style="display:flex;gap:12px">
+      <button class="btn btn-g" style="flex:1;justify-content:center" onclick="closeM('reset-avail-modal')">Cancel</button>
+      <button class="btn btn-d" style="flex:1;justify-content:center" onclick="confirmResetAllAvail()">🗑️ Reset All</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN SUBMIT OWN AVAILABILITY -->
+<div class="modal-overlay" id="admin-avail-modal">
+  <div class="modal-box" style="max-width:600px">
+    <button class="modal-close" onclick="closeM('admin-avail-modal')">✕</button>
+    <div class="modal-title">📅 My Availability (Manager)</div>
+    <p style="font-size:13px;color:var(--light);margin-bottom:16px">Submit your own availability for scheduling purposes.</p>
+    <div class="week-select-bar">
+      <label>Week of</label>
+      <input type="date" id="adm-avail-week" style="max-width:180px">
+      <div class="fg" style="flex:1;min-width:140px"><select id="adm-avail-pos"><option value="Store Manager">Store Manager</option><option value="Shift Manager">Shift Manager</option><option value="Assistant General Manager">Assistant GM</option><option value="Cook">Cook / Food Service</option><option value="Team Member">Team Member</option></select></div>
+    </div>
+    <div class="avail-week-grid" id="adm-avail-g"></div>
+    <button class="btn btn-p" style="margin-top:20px;width:100%;justify-content:center" onclick="saveAdminAvail()">💾 Submit My Availability</button>
+  </div>
+</div>
+
 <div id="app">
   <nav class="sidebar">
     <div class="sidebar-logo"><div class="kfc-badge"><span style="font-size:32px">🍗</span><div class="kfc-text"><h2>1416 KFC</h2><span>Management System</span></div></div></div>
@@ -396,10 +478,20 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
     <!-- ORDERS -->
     <div class="page" id="page-orders">
-      <div class="card"><div class="card-title">🛒 Sysco Order Planning</div>
+      <div class="card">
+        <div class="card-title">📄 Upload Previous Order / Inventory Sheet</div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:16px">Upload your Sysco order sheet or current inventory document (PDF, image, or spreadsheet) to automatically generate a suggested order list.</p>
+        <div class="upload-zone" id="ord-upload-zone">
+          <input type="file" id="ord-file-input" accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.txt" onchange="handleOrderUpload(this.files[0])">
+          <div class="uz-icon">📋</div>
+          <p>Drop your order/inventory document here</p>
+          <small>Supports: PDF, Image (JPG/PNG), CSV, Excel, Text</small>
+        </div>
+        <div id="ord-upload-status" style="margin-bottom:12px"></div>
+        <div class="card-title" style="margin-top:8px">🛒 Sysco Order Planning</div>
         <div id="ord-info" style="margin-bottom:16px"></div>
         <div class="order-grid" id="ord-list"></div>
-        <div style="margin-top:20px;display:flex;gap:12px">
+        <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap">
           <button class="btn btn-p" onclick="genOrder()">⚡ Suggest Order</button>
           <button class="btn btn-g" onclick="saveOrder()">💾 Save Order</button>
         </div>
@@ -416,10 +508,18 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
     <!-- ADMIN AVAILABILITY -->
     <div class="page" id="page-availability">
+      <div class="admin-avail-submit card">
+        <div class="card-title" style="margin-bottom:12px">🧑‍💼 Manager — Submit My Availability</div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:14px">As manager, submit your own availability for the schedule. Choose your position and the week.</p>
+        <button class="btn btn-p" onclick="openAdminAvail()">📅 Open My Availability Form</button>
+      </div>
       <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
           <div class="card-title" style="margin-bottom:0">📅 Employee Availability</div>
-          <div id="avail-pending-count" style="font-size:13px;color:var(--gold)"></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <div id="avail-pending-count" style="font-size:13px;color:var(--gold)"></div>
+            <button class="btn btn-d btn-sm" onclick="openM('reset-avail-modal')">🗑️ Reset All Availability</button>
+          </div>
         </div>
         <p style="font-size:13px;color:var(--light);margin-bottom:16px">Review and approve availability submissions. Approved availability is used in Auto-Schedule.</p>
         <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
@@ -448,9 +548,18 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <div class="card-title" style="margin-bottom:0">📅 My Availability</div>
           <div id="avail-status-badge"></div>
         </div>
-        <p style="font-size:13px;color:var(--light);margin-bottom:20px">Check days you're available and set preferred hours. Your manager will review and approve.</p>
-        <div class="avail-grid" id="avail-g"></div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:16px">Select the week and check the days you're available with your preferred hours. Your manager will review and approve.</p>
+        <div class="week-select-bar">
+          <label>Week Starting</label>
+          <input type="date" id="emp-avail-week" style="max-width:180px" onchange="renderAvailWeekDays()">
+          <span style="font-size:13px;color:var(--light)" id="emp-avail-week-label"></span>
+        </div>
+        <div class="avail-week-grid" id="avail-g"></div>
         <button class="btn btn-p" style="margin-top:20px" onclick="saveAvail()">💾 Save & Submit Availability</button>
+      </div>
+      <div class="card" style="margin-top:16px" id="avail-history-card">
+        <div class="card-title">🗂️ My Previous Submissions</div>
+        <div id="avail-history-list"></div>
       </div>
     </div>
 
@@ -458,11 +567,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="page" id="page-emp-msg">
       <div class="card"><div class="card-title">✉️ Message the Manager</div>
         <p style="font-size:13px;color:var(--light);margin-bottom:16px">Messages are confidential — only the store manager can read them.</p>
-        <div style="display:flex;gap:12px">
-          <textarea id="emp-msg-txt" style="flex:1;padding:12px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--white);font-family:'Barlow',sans-serif;font-size:14px;resize:none;height:90px;outline:none" placeholder="Type your message..."></textarea>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <textarea id="emp-msg-txt" style="flex:1;min-width:200px;padding:12px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--white);font-family:'Barlow',sans-serif;font-size:14px;resize:none;height:90px;outline:none" placeholder="Type your message..."></textarea>
           <button class="btn btn-p" style="align-self:flex-end" onclick="sendEmpMsg()">📨 Send</button>
         </div>
-        <div style="margin-top:24px"><div class="card-title" style="margin-bottom:12px">📤 My Sent Messages</div><div id="my-msgs"></div></div>
+        <div style="margin-top:24px"><div class="card-title" style="margin-bottom:12px">📤 My Messages & Replies</div><div id="my-msgs"></div></div>
       </div>
     </div>
   </div>
@@ -543,6 +652,16 @@ function bootDismiss() {
 }
 // Hard fallback — show login after 5s no matter what
 setTimeout(bootDismiss, 5000);
+
+// Upload zone drag events
+document.addEventListener('DOMContentLoaded',()=>{
+  const zone=document.getElementById('ord-upload-zone');
+  if(zone){
+    zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
+    zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+    zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');const f=e.dataTransfer.files[0];if(f) handleOrderUpload(f);});
+  }
+});
 
 // ── AUTH ─────────────────────────────────────────
 function doLogin() {
@@ -1282,6 +1401,94 @@ async function delProd(id) {
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
+// ── ORDER DOCUMENT UPLOAD ────────────────────────
+async function handleOrderUpload(file) {
+  if(!file) return;
+  const statusEl=document.getElementById('ord-upload-status');
+  statusEl.innerHTML=`<div class="alert-b">⏳ Reading document: <strong>${file.name}</strong>...</div>`;
+  try {
+    let textContent='';
+    const ext=file.name.split('.').pop().toLowerCase();
+    
+    if(ext==='txt'||ext==='csv') {
+      textContent=await file.text();
+    } else if(['png','jpg','jpeg','pdf'].includes(ext)) {
+      // Convert to base64 for Claude API
+      const base64=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=()=>rej(new Error('Read failed')); r.readAsDataURL(file); });
+      const mediaType=ext==='pdf'?'application/pdf':`image/${ext==='jpg'?'jpeg':ext}`;
+      statusEl.innerHTML=`<div class="alert-b">🤖 Analyzing document with AI...</div>`;
+      
+      const contentBlock=ext==='pdf'
+        ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}}
+        :{type:'image',source:{type:'base64',media_type:mediaType,data:base64}};
+      
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:1000,
+          messages:[{role:'user',content:[
+            contentBlock,
+            {type:'text',text:`This is a KFC store order sheet or inventory document. Extract all product names and quantities. Return ONLY a JSON object where keys are product names and values are quantities (numbers). Example: {"Whole Chicken":10,"Frying Oil":3}. Include only items that match or are similar to these categories: chicken products, sauces, sides, beverages, packaging, cooking supplies. No extra text, no markdown.`}
+          ]}]
+        })
+      });
+      const data=await res.json();
+      textContent=data.content?.map(c=>c.text||'').join('')||'';
+    } else {
+      statusEl.innerHTML=`<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Unsupported file type. Please upload PDF, image, CSV, or text file.</div>`;
+      return;
+    }
+
+    // Try to parse JSON from response
+    let parsed={};
+    try {
+      const cleaned=textContent.replace(/```json|```/g,'').trim();
+      parsed=JSON.parse(cleaned);
+    } catch {
+      // If not JSON, try to extract from CSV/text
+      const lines=textContent.split('\n').filter(l=>l.trim());
+      lines.forEach(line=>{
+        const parts=line.split(/[,\t]/);
+        if(parts.length>=2){
+          const name=parts[0].trim();
+          const qty=parseInt(parts[1]);
+          if(name&&!isNaN(qty)) parsed[name]=qty;
+        }
+      });
+    }
+
+    if(Object.keys(parsed).length===0){
+      statusEl.innerHTML=`<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">⚠️ Could not extract order data from this document. Try a clearer image or CSV format.</div>`;
+      return;
+    }
+
+    // Merge with ordQty — update matching items
+    let matched=0;
+    ORDS.forEach(o=>{
+      const match=Object.keys(parsed).find(k=>k.toLowerCase().includes(o.n.toLowerCase().split(' ')[0])||o.n.toLowerCase().includes(k.toLowerCase().split(' ')[0]));
+      if(match){ ordQty[o.n]=parsed[match]; matched++; }
+    });
+    
+    // Re-render the order grid with new quantities
+    document.getElementById('ord-list').innerHTML=ORDS.map(o=>`
+      <div class="order-item">
+        <div><div style="font-weight:500;color:var(--lighter)">${o.n}</div><div style="font-size:11px;color:var(--light)">${o.u}</div></div>
+        <div class="oqty">
+          <button class="qbtn" onclick="adjQ('${o.n}',-1)">−</button>
+          <div style="min-width:32px;text-align:center;font-weight:600" id="oq-${o.n.replace(/\W/g,'-')}">${ordQty[o.n]}</div>
+          <button class="qbtn" onclick="adjQ('${o.n}',1)">+</button>
+        </div>
+      </div>`).join('');
+
+    statusEl.innerHTML=`<div class="alert-b" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#4ade80">✅ Document processed — ${matched} item${matched!==1?'s':''} matched and quantities updated from <strong>${file.name}</strong>. Review and adjust below.</div>`;
+  } catch(e) {
+    console.error('Order upload error:',e);
+    statusEl.innerHTML=`<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Error processing document: ${e.message}</div>`;
+  }
+}
+
 // ── ORDERS ──────────────────────────────────────
 const ORDS=[
   {n:'Whole Chicken',u:'case',b:10},{n:'Chicken Breast',u:'case',b:8},{n:'Chicken Wings',u:'case',b:6},
@@ -1331,14 +1538,16 @@ function renderMsgs() {
   try {
     document.getElementById('msgs-list').innerHTML=messages.length?messages.map(m=>`
       <div class="msg-item ${m.read?'':'unread'}">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px">
           <div><strong style="color:var(--white)">${m.fromName||'?'}</strong> <span style="font-size:11px;color:var(--light)">${m.fromRole||''}</span></div>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'}</span>
-            ${!m.read?`<button class="btn btn-g btn-sm" onclick="markRead('${m.id}')">Mark Read</button>`:`<span style="font-size:11px;color:var(--green)">✅</span>`}
+            ${!m.read?`<button class="btn btn-g btn-sm" onclick="markRead('${m.id}')">✅ Mark Read</button>`:`<span style="font-size:11px;color:var(--green)">✅ Read</span>`}
+            <button class="btn btn-g btn-sm" onclick="openReply('${m.id}','${(m.fromName||'?').replace(/'/g,"\\'")}','${(m.fromUid||'').replace(/'/g,"\\'")}','${(m.message||'').replace(/'/g,"\\'").replace(/\n/g,' ').slice(0,80)}')">↩️ Reply</button>
           </div>
         </div>
         <div style="font-size:13px;color:var(--lighter)">${m.message||''}</div>
+        ${m.adminReply?`<div class="msg-reply"><div class="msg-reply-label">Your Reply</div>${m.adminReply}</div>`:''}
       </div>`).join(''):`<div class="empty"><div class="ei">📭</div><p>No messages yet.</p></div>`;
   } catch(e){ console.error('renderMsgs:',e); }
 }
@@ -1348,6 +1557,37 @@ async function markRead(id) {
     await db.collection('kfc_messages').doc(id).update({read:true});
     const m=messages.find(x=>x.id===id); if(m) m.read=true;
     renderMsgs(); renderDash();
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+function openReply(msgId, fromName, fromUid, preview) {
+  document.getElementById('reply-msg-id').value=msgId;
+  document.getElementById('reply-to-uid').value=fromUid;
+  document.getElementById('reply-orig').innerHTML=`<strong style="color:var(--white)">${fromName}</strong><div style="margin-top:6px;color:var(--lighter);font-size:13px">"${preview}${preview.length>=80?'…':''}"</div>`;
+  const m=messages.find(x=>x.id===msgId);
+  document.getElementById('reply-txt').value=m?.adminReply||'';
+  openM('reply-modal');
+}
+
+async function sendReplyFixed() {
+  // Unified reply handler for both messages and availability submissions
+  const msgId=document.getElementById('reply-msg-id').value;
+  const toUid=document.getElementById('reply-to-uid').value;
+  const txt=document.getElementById('reply-txt').value.trim();
+  if(!txt){ toast('Write a reply first.','error'); return; }
+  try {
+    if(toUid.startsWith('avail_')) {
+      const availDocId=toUid.replace('avail_','');
+      await db.collection('kfc_availability').doc(availDocId).update({adminReply:txt,repliedAt:FS.serverTimestamp()});
+      toast('Reply saved on availability submission.','success');
+      renderAdminAvail();
+    } else {
+      await db.collection('kfc_messages').doc(msgId).update({adminReply:txt,read:true,repliedAt:FS.serverTimestamp()});
+      const m=messages.find(x=>x.id===msgId); if(m){ m.adminReply=txt; m.read=true; }
+      toast('Reply sent ✅','success');
+      renderMsgs();
+    }
+    closeM('reply-modal');
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
@@ -1368,42 +1608,85 @@ function renderMySched() {
 
 // ── AVAILABILITY ────────────────────────────────
 const WD=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const WD_SHORT=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+function getNextMonday() {
+  const d=new Date();
+  const day=d.getDay();
+  const diff=day===1?0:day===0?1:8-day;
+  d.setDate(d.getDate()+diff);
+  return fd(d);
+}
+
 function renderAvail() {
-  document.getElementById('avail-g').innerHTML=WD.map((day,i)=>`
-    <div class="avail-day" id="ad-${i}"><div class="dn">${day.slice(0,3)}</div>
-    <label class="avail-check"><input type="checkbox" id="ac-${i}" onchange="togAv(${i})"> Available</label>
-    <div class="avail-times" id="at-${i}" style="display:none">
-      <input type="time" id="af-${i}" value="09:00">
-      <input type="time" id="ato-${i}" value="17:00">
-    </div></div>`).join('');
-  // Load and pre-fill saved availability
+  // Set default week to next Monday
+  const wkInput=document.getElementById('emp-avail-week');
+  if(!wkInput.value) wkInput.value=getNextMonday();
+  renderAvailWeekDays();
   if(CU) loadMyAvailability();
+  renderAvailHistory();
+}
+
+function renderAvailWeekDays() {
+  const wkInput=document.getElementById('emp-avail-week');
+  const weekStart=wkInput.value?new Date(wkInput.value+'T12:00:00'):new Date();
+  // Make sure it's a Monday
+  const dow=weekStart.getDay();
+  if(dow!==1){ const diff=dow===0?1:8-dow; weekStart.setDate(weekStart.getDate()+diff); wkInput.value=fd(weekStart); }
+  const label=document.getElementById('emp-avail-week-label');
+  const weekEnd=new Date(weekStart); weekEnd.setDate(weekStart.getDate()+6);
+  if(label) label.textContent=`(${weekStart.toLocaleDateString('en-CA',{month:'short',day:'numeric'})} – ${weekEnd.toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'})})`;
+
+  document.getElementById('avail-g').innerHTML=WD.map((day,i)=>{
+    const dayDate=new Date(weekStart); dayDate.setDate(weekStart.getDate()+i);
+    const dayDateStr=dayDate.toLocaleDateString('en-CA',{month:'short',day:'numeric'});
+    return`<div class="avail-week-day" id="ad-${i}" onclick="togAvDay(${i})">
+      <div class="awn">${WD_SHORT[i]}</div>
+      <div class="awd" style="font-size:10px;margin-bottom:6px">${dayDateStr}</div>
+      <div style="font-size:18px" id="adi-${i}">○</div>
+      <div class="avail-times" id="at-${i}" style="display:none;flex-direction:column;gap:4px;margin-top:8px" onclick="event.stopPropagation()">
+        <input type="time" id="af-${i}" value="09:00" style="padding:4px 6px;font-size:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:var(--white);outline:none;font-family:'Barlow',sans-serif;width:100%">
+        <input type="time" id="ato-${i}" value="17:00" style="padding:4px 6px;font-size:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:var(--white);outline:none;font-family:'Barlow',sans-serif;width:100%">
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function togAvDay(i){
+  const el=document.getElementById('ad-'+i);
+  const isOn=el.classList.toggle('on');
+  document.getElementById('at-'+i).style.display=isOn?'flex':'none';
+  document.getElementById('adi-'+i).textContent=isOn?'✅':'○';
 }
 
 async function loadMyAvailability() {
   try {
-    const snap=await db.collection('kfc_availability').doc(CU.uid).get();
+    const wkInput=document.getElementById('emp-avail-week');
+    const weekKey=wkInput.value||getNextMonday();
+    const docId=CU.uid+'_'+weekKey;
+    // Try week-specific first, fall back to legacy
+    let snap=await db.collection('kfc_availability').doc(docId).get();
+    if(!snap.exists) snap=await db.collection('kfc_availability').doc(CU.uid).get();
     if(snap.exists){
       const data=snap.data();
       const avail=data.availability||{};
       WD.forEach((day,i)=>{
         if(avail[day]){
-          const cb=document.getElementById('ac-'+i);
-          if(cb){ cb.checked=true; togAv(i);
-            const f=document.getElementById('af-'+i); if(f) f.value=avail[day].from||'09:00';
-            const t=document.getElementById('ato-'+i); if(t) t.value=avail[day].to||'17:00';
-          }
+          const el=document.getElementById('ad-'+i);
+          if(el&&!el.classList.contains('on')){ togAvDay(i); }
+          const f=document.getElementById('af-'+i); if(f) f.value=avail[day].from||'09:00';
+          const t=document.getElementById('ato-'+i); if(t) t.value=avail[day].to||'17:00';
         }
       });
-      // Show status badge
       const statusBadge=document.getElementById('avail-status-badge');
       if(statusBadge){
         const st=data.status||'pending';
-        statusBadge.innerHTML=st==='approved'
-          ?`<span class="badge b-green">✅ Approved by Manager</span>`
+        const adminReply=data.adminReply?`<div style="margin-top:6px;font-size:12px;color:var(--blue)">💬 Manager: "${data.adminReply}"</div>`:'';
+        statusBadge.innerHTML=(st==='approved'
+          ?`<span class="badge b-green">✅ Approved</span>`
           :st==='rejected'
             ?`<span class="badge b-red">❌ Rejected — Please resubmit</span>`
-            :`<span class="badge b-gold">⏳ Pending Manager Approval</span>`;
+            :`<span class="badge b-gold">⏳ Pending Approval</span>`)+adminReply;
       }
     } else {
       const statusBadge=document.getElementById('avail-status-badge');
@@ -1412,21 +1695,43 @@ async function loadMyAvailability() {
   } catch(e){ console.warn('loadMyAvailability:',e); }
 }
 
-function togAv(i){ const c=document.getElementById('ac-'+i); document.getElementById('at-'+i).style.display=c.checked?'flex':'none'; document.getElementById('ad-'+i).classList.toggle('on',c.checked); }
+async function renderAvailHistory() {
+  const el=document.getElementById('avail-history-list');
+  if(!el) return;
+  try {
+    const snap=await db.collection('kfc_availability').where('uid','==',CU.uid).get();
+    if(snap.empty){ el.innerHTML=`<div class="empty"><div class="ei">📭</div><p>No submissions yet.</p></div>`; return; }
+    const docs=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.updatedAt?.toMillis?.()||0)-(a.updatedAt?.toMillis?.()||0));
+    el.innerHTML=docs.map(d=>{
+      const st=d.status||'pending';
+      const stBadge=st==='approved'?'<span class="badge b-green">✅ Approved</span>':st==='rejected'?'<span class="badge b-red">❌ Rejected</span>':'<span class="badge b-gold">⏳ Pending</span>';
+      const week=d.weekStart?` · Week of ${d.weekStart}`:'';
+      const reply=d.adminReply?`<div class="msg-reply"><div class="msg-reply-label">Manager Reply</div>${d.adminReply}</div>`:'';
+      return`<div class="msg-item"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px"><div>${stBadge} <span style="font-size:12px;color:var(--light)">${week}</span></div><span style="font-size:11px;color:var(--light)">${d.updatedAt?.toDate?d.updatedAt.toDate().toLocaleDateString('en-CA'):'—'}</span></div>${reply}</div>`;
+    }).join('');
+  } catch(e){ el.innerHTML=''; }
+}
 
 async function saveAvail() {
   try {
+    const wkInput=document.getElementById('emp-avail-week');
+    const weekStart=wkInput.value||getNextMonday();
     const avail={};
-    WD.forEach((day,i)=>{ const c=document.getElementById('ac-'+i); if(c?.checked) avail[day]={from:document.getElementById('af-'+i)?.value||'09:00',to:document.getElementById('ato-'+i)?.value||'17:00'}; });
+    WD.forEach((day,i)=>{
+      const el=document.getElementById('ad-'+i);
+      if(el?.classList.contains('on')) avail[day]={from:document.getElementById('af-'+i)?.value||'09:00',to:document.getElementById('ato-'+i)?.value||'17:00'};
+    });
     const name=CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email;
-    await db.collection('kfc_availability').doc(CU.uid).set({
+    const docId=CU.uid+'_'+weekStart;
+    await db.collection('kfc_availability').doc(docId).set({
       uid:CU.uid, name, email:CU.email, availability:avail,
-      status:'pending', // reset to pending on every new submission
+      weekStart, status:'pending', adminReply:'',
       updatedAt:FS.serverTimestamp()
     });
     const statusBadge=document.getElementById('avail-status-badge');
     if(statusBadge) statusBadge.innerHTML=`<span class="badge b-gold">⏳ Pending Manager Approval</span>`;
-    toast('Availability submitted — waiting for manager approval.','success');
+    toast('Availability submitted for week of '+weekStart,'success');
+    renderAvailHistory();
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
@@ -1457,11 +1762,12 @@ async function renderAdminAvail() {
     const dayColor = {'Monday':'var(--blue)','Tuesday':'var(--gold)','Wednesday':'var(--green)','Thursday':'var(--orange)','Friday':'var(--red)','Saturday':'#a855f7','Sunday':'#ec4899'};
     
     let allDocs=snap.docs.map(d=>({id:d.id,...d.data()}));
+    // Sort by updatedAt desc
+    allDocs.sort((a,b)=>(b.updatedAt?.toMillis?.()||0)-(a.updatedAt?.toMillis?.()||0));
     const pendingCount=allDocs.filter(d=>!d.status||d.status==='pending').length;
     const pc=document.getElementById('avail-pending-count');
     if(pc) pc.textContent=pendingCount?`⏳ ${pendingCount} pending approval`:'';
 
-    // Apply filter
     if(availFilter!=='all'){
       allDocs=allDocs.filter(d=>{
         const st=d.status||'pending';
@@ -1479,17 +1785,19 @@ async function renderAdminAvail() {
       const name = data.name || 'Unknown';
       const avail = data.availability || {};
       const updated = data.updatedAt?.toDate ? data.updatedAt.toDate().toLocaleDateString('en-CA') : '—';
+      const weekLabel = data.weekStart ? `<span style="font-size:11px;color:var(--blue);margin-left:8px">📅 Week of ${data.weekStart}</span>` : '';
       const availDays = days.filter(d => avail[d]);
       const status=data.status||'pending';
       const statusColor=status==='approved'?'var(--green)':status==='rejected'?'var(--red)':'var(--gold)';
       const statusLabel=status==='approved'?'✅ Approved':status==='rejected'?'❌ Rejected':'⏳ Pending';
+      const replyHtml=data.adminReply?`<div class="msg-reply"><div class="msg-reply-label">Your Reply</div>${data.adminReply}</div>`:'';
       html += `
         <div class="avail-card ${status}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
             <div style="display:flex;align-items:center;gap:10px">
               <div style="width:36px;height:36px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;flex-shrink:0">${ini(name)}</div>
               <div>
-                <div style="font-weight:600;font-size:15px;color:var(--white)">${name}</div>
+                <div style="font-weight:600;font-size:15px;color:var(--white)">${name}${weekLabel}</div>
                 <div style="font-size:11px;color:var(--light)">Submitted: ${updated} · <span style="color:${statusColor}">${statusLabel}</span></div>
               </div>
             </div>
@@ -1498,12 +1806,13 @@ async function renderAdminAvail() {
               ${status!=='approved'?`<button class="btn btn-s btn-sm" onclick="setAvailStatus('${data.id}','approved')">✅ Approve</button>`:''}
               ${status!=='rejected'?`<button class="btn btn-d btn-sm" onclick="setAvailStatus('${data.id}','rejected')">❌ Reject</button>`:''}
               ${status!=='pending'?`<button class="btn btn-g btn-sm" onclick="setAvailStatus('${data.id}','pending')">↩ Reset</button>`:''}
+              <button class="btn btn-g btn-sm" onclick="openAvailReply('${data.id}','${name.replace(/'/g,"\\'")}','${(data.adminReply||'').replace(/'/g,"\\'")}')">💬 Reply</button>
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             ${days.map(d => {
               const isAvail = avail[d];
-              return `<div style="flex:1;min-width:62px;background:${isAvail?'rgba(34,197,94,.1)':'rgba(255,255,255,.03)'};border:1px solid ${isAvail?'rgba(34,197,94,.3)':'rgba(255,255,255,.06)'};border-radius:8px;padding:7px 5px;text-align:center">
+              return `<div style="flex:1;min-width:58px;background:${isAvail?'rgba(34,197,94,.1)':'rgba(255,255,255,.03)'};border:1px solid ${isAvail?'rgba(34,197,94,.3)':'rgba(255,255,255,.06)'};border-radius:8px;padding:7px 5px;text-align:center">
                 <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:${isAvail?dayColor[d]:'var(--mid)'}">${dayShort[d]}</div>
                 ${isAvail
                   ? `<div style="font-size:10px;color:var(--green);margin-top:3px">✅</div><div style="font-size:9px;color:var(--light);margin-top:1px">${avail[d].from}–${avail[d].to}</div>`
@@ -1512,6 +1821,7 @@ async function renderAdminAvail() {
               </div>`;
             }).join('')}
           </div>
+          ${replyHtml}
         </div>`;
     });
     el.innerHTML = html;
@@ -1525,6 +1835,85 @@ async function setAvailStatus(docId, status) {
   try {
     await db.collection('kfc_availability').doc(docId).update({status, reviewedAt:FS.serverTimestamp()});
     toast(`Availability ${status==='approved'?'approved ✅':status==='rejected'?'rejected ❌':'reset ↩'}.`, status==='approved'?'success':status==='rejected'?'error':'info');
+    renderAdminAvail();
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+function openAvailReply(docId, name, existingReply) {
+  document.getElementById('reply-msg-id').value=docId;
+  document.getElementById('reply-to-uid').value='avail_'+docId;
+  document.getElementById('reply-orig').innerHTML=`<strong style="color:var(--white)">${name}</strong> — availability submission`;
+  document.getElementById('reply-txt').value=existingReply||'';
+  openM('reply-modal');
+}
+
+async function confirmResetAllAvail() {
+  try {
+    const snap=await db.collection('kfc_availability').get();
+    let count=0;
+    for(const doc of snap.docs){ await db.collection('kfc_availability').doc(doc.id).delete(); count++; }
+    closeM('reset-avail-modal');
+    toast(`All availability reset — ${count} submissions deleted.`,'success');
+    renderAdminAvail();
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ── ADMIN SUBMIT OWN AVAILABILITY ───────────────
+function openAdminAvail() {
+  const wkInput=document.getElementById('adm-avail-week');
+  if(!wkInput.value){
+    const d=new Date(); const day=d.getDay(); const diff=day===1?0:day===0?1:8-day;
+    d.setDate(d.getDate()+diff); wkInput.value=fd(d);
+  }
+  renderAdminAvailGrid();
+  openM('admin-avail-modal');
+}
+
+function renderAdminAvailGrid() {
+  const wkInput=document.getElementById('adm-avail-week');
+  const weekStart=wkInput.value?new Date(wkInput.value+'T12:00:00'):new Date();
+  document.getElementById('adm-avail-g').innerHTML=WD.map((day,i)=>{
+    const dayDate=new Date(weekStart); dayDate.setDate(weekStart.getDate()+i);
+    const dayDateStr=dayDate.toLocaleDateString('en-CA',{month:'short',day:'numeric'});
+    return`<div class="avail-week-day" id="aadm-${i}" onclick="togAdmAvDay(${i})">
+      <div class="awn">${WD_SHORT[i]}</div>
+      <div class="awd" style="font-size:10px;margin-bottom:6px">${dayDateStr}</div>
+      <div style="font-size:18px" id="aadmi-${i}">○</div>
+      <div id="aadmt-${i}" style="display:none;flex-direction:column;gap:4px;margin-top:8px" onclick="event.stopPropagation()">
+        <input type="time" id="aadmf-${i}" value="09:00" style="padding:4px 6px;font-size:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:var(--white);outline:none;font-family:'Barlow',sans-serif;width:100%">
+        <input type="time" id="aadmto-${i}" value="17:00" style="padding:4px 6px;font-size:11px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:6px;color:var(--white);outline:none;font-family:'Barlow',sans-serif;width:100%">
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function togAdmAvDay(i) {
+  const el=document.getElementById('aadm-'+i);
+  const isOn=el.classList.toggle('on');
+  document.getElementById('aadmt-'+i).style.display=isOn?'flex':'none';
+  document.getElementById('aadmi-'+i).textContent=isOn?'✅':'○';
+}
+
+async function saveAdminAvail() {
+  try {
+    const weekStart=document.getElementById('adm-avail-week').value;
+    const pos=document.getElementById('adm-avail-pos').value;
+    if(!weekStart){ toast('Please select a week.','error'); return; }
+    const avail={};
+    WD.forEach((day,i)=>{
+      const el=document.getElementById('aadm-'+i);
+      if(el?.classList.contains('on')) avail[day]={from:document.getElementById('aadmf-'+i)?.value||'09:00',to:document.getElementById('aadmto-'+i)?.value||'17:00'};
+    });
+    const name=CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email;
+    const docId=CU.uid+'_'+weekStart;
+    await db.collection('kfc_availability').doc(docId).set({
+      uid:CU.uid, name, email:CU.email, availability:avail,
+      weekStart, position:pos, isAdmin:true,
+      status:'approved', // auto-approved for manager
+      updatedAt:FS.serverTimestamp()
+    });
+    closeM('admin-avail-modal');
+    toast(`Manager availability saved for week of ${weekStart} (${pos}) ✅`,'success');
     renderAdminAvail();
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
@@ -1545,8 +1934,21 @@ async function renderMyMsgs() {
   try {
     const snap=await db.collection('kfc_messages').where('fromUid','==',CU.uid).get();
     const docs=snap.docs.sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0));
-    el.innerHTML=docs.length?docs.map(d=>{ const m=d.data(); return`<div class="msg-item"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong style="color:var(--white)">To: Manager</strong><span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'} ${m.read?'· ✅':'· ⏳'}</span></div><div style="font-size:13px;color:var(--lighter)">${m.message||''}</div></div>`; }).join('')
-      :`<div class="empty"><div class="ei">📤</div><p>No messages sent yet.</p></div>`;
+    if(!docs.length){ el.innerHTML=`<div class="empty"><div class="ei">📤</div><p>No messages sent yet.</p></div>`; return; }
+    el.innerHTML=docs.map(d=>{
+      const m=d.data();
+      const replyHtml=m.adminReply
+        ?`<div class="msg-reply"><div class="msg-reply-label">🧑‍💼 Manager Reply</div>${m.adminReply}</div>`
+        :(m.read?'<div style="font-size:11px;color:var(--green);margin-top:8px">✅ Read by manager</div>':'<div style="font-size:11px;color:var(--gold);margin-top:8px">⏳ Pending read</div>');
+      return`<div class="msg-item ${m.adminReply?'':''}">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+          <strong style="color:var(--white)">To: Manager</strong>
+          <span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'}</span>
+        </div>
+        <div style="font-size:13px;color:var(--lighter)">${m.message||''}</div>
+        ${replyHtml}
+      </div>`;
+    }).join('');
   } catch { el.innerHTML='<div class="empty"><div class="ei">📤</div><p>No messages yet.</p></div>'; }
 }
 </script>
