@@ -1,1323 +1,928 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>KFC 1416 — Store Manager</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1416 KFC — Store Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
-:root {
-  --red: #E4002B;
-  --red-dark: #b8001f;
-  --red-glow: rgba(228,0,43,0.18);
-  --cream: #FFF8F0;
-  --warm: #FFF0DC;
-  --terra: #C65D00;
-  --terra-lt: #E87722;
-  --charcoal: #1A1209;
-  --mid: #3D2B1A;
-  --muted: #7A6050;
-  --border: rgba(60,35,10,0.13);
-  --card: #FFFFFF;
-  --shadow: 0 2px 18px rgba(30,10,0,0.08);
-  --radius: 14px;
-  --font-head: 'Bebas Neue', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
-  --font-mono: 'DM Mono', monospace;
-}
-
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:var(--font-body);background:var(--cream);color:var(--charcoal);min-height:100vh;}
-
-/* ── LOGIN ── */
-#login-screen{
-  display:flex;align-items:center;justify-content:center;
-  min-height:100vh;
-  background: linear-gradient(135deg,#1A0A00 0%,#3D1800 50%,#1A0A00 100%);
-  position:relative;overflow:hidden;
-}
-#login-screen::before{
-  content:'';position:absolute;inset:0;
-  background:radial-gradient(circle at 30% 40%, rgba(228,0,43,0.25) 0%, transparent 55%),
-             radial-gradient(circle at 75% 65%, rgba(232,119,34,0.18) 0%, transparent 50%);
-}
-.login-card{
-  position:relative;z-index:2;
-  background:rgba(255,248,240,0.04);
-  border:1px solid rgba(255,248,240,0.12);
-  backdrop-filter:blur(20px);
-  border-radius:20px;
-  padding:48px 44px;
-  width:360px;
-  text-align:center;
-}
-.login-logo{font-family:var(--font-head);font-size:52px;color:var(--red);letter-spacing:2px;line-height:1;}
-.login-sub{color:rgba(255,248,240,0.5);font-size:11px;letter-spacing:3px;text-transform:uppercase;margin-bottom:36px;font-family:var(--font-mono);}
-.login-card input{
-  width:100%;padding:12px 16px;
-  background:rgba(255,248,240,0.07);
-  border:1px solid rgba(255,248,240,0.15);
-  border-radius:10px;color:#fff;
-  font-family:var(--font-body);font-size:14px;
-  margin-bottom:12px;outline:none;
-  transition:border-color .2s;
-}
-.login-card input::placeholder{color:rgba(255,248,240,0.35);}
-.login-card input:focus{border-color:var(--red);}
-.btn-login{
-  width:100%;padding:13px;
-  background:var(--red);border:none;border-radius:10px;
-  color:#fff;font-family:var(--font-head);font-size:18px;letter-spacing:1px;
-  cursor:pointer;transition:background .2s,transform .1s;
-}
-.btn-login:hover{background:var(--red-dark);}
-.btn-login:active{transform:scale(0.98);}
-.login-err{color:#ff6b6b;font-size:12px;margin-top:8px;min-height:18px;}
-
-/* ── SHELL ── */
-#app{display:none;min-height:100vh;flex-direction:column;}
-header{
-  background:var(--charcoal);
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 28px;height:60px;position:sticky;top:0;z-index:100;
-  border-bottom:2px solid var(--red);
-}
-.header-logo{font-family:var(--font-head);font-size:26px;color:var(--red);letter-spacing:1px;}
-.header-right{display:flex;align-items:center;gap:14px;}
-.header-user{color:rgba(255,248,240,0.65);font-size:13px;font-family:var(--font-mono);}
-.btn-logout{
-  background:rgba(228,0,43,0.15);border:1px solid rgba(228,0,43,0.4);
-  color:var(--red);font-size:12px;padding:6px 14px;border-radius:8px;
-  cursor:pointer;font-family:var(--font-mono);transition:background .2s;
-}
-.btn-logout:hover{background:rgba(228,0,43,0.3);}
-
-/* ── NAV TABS ── */
-nav{
-  background:#fff;border-bottom:1px solid var(--border);
-  display:flex;gap:0;overflow-x:auto;
-  padding:0 20px;
-}
-nav button{
-  background:none;border:none;border-bottom:3px solid transparent;
-  font-family:var(--font-body);font-weight:500;font-size:13px;
-  color:var(--muted);padding:14px 16px;cursor:pointer;
-  white-space:nowrap;transition:color .2s,border-color .2s;
-}
-nav button.active{color:var(--red);border-bottom-color:var(--red);}
-nav button:hover:not(.active){color:var(--charcoal);}
-
-/* ── MAIN ── */
-main{flex:1;padding:28px 24px;max-width:1200px;width:100%;margin:0 auto;}
-
-/* ── SECTION TITLES ── */
-.section-title{
-  font-family:var(--font-head);font-size:32px;
-  color:var(--charcoal);letter-spacing:.5px;margin-bottom:6px;
-}
-.section-sub{color:var(--muted);font-size:13px;margin-bottom:24px;}
-
-/* ── CARDS ── */
-.card{
-  background:var(--card);border-radius:var(--radius);
-  box-shadow:var(--shadow);border:1px solid var(--border);
-  padding:20px 22px;margin-bottom:18px;
-}
-.card-title{font-weight:600;font-size:14px;margin-bottom:14px;color:var(--charcoal);}
-
-/* ── STATS ROW ── */
-.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px;}
-.stat-card{
-  background:var(--card);border-radius:var(--radius);
-  border:1px solid var(--border);box-shadow:var(--shadow);
-  padding:18px 20px;
-}
-.stat-num{font-family:var(--font-head);font-size:38px;line-height:1;color:var(--red);}
-.stat-label{font-size:12px;color:var(--muted);margin-top:4px;font-family:var(--font-mono);}
-
-/* ── TABLE ── */
-.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border);}
-table{width:100%;border-collapse:collapse;font-size:13px;}
-thead{background:var(--charcoal);}
-th{color:rgba(255,248,240,0.8);font-family:var(--font-mono);font-size:11px;font-weight:500;
-   text-align:left;padding:10px 14px;letter-spacing:.5px;}
-td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--charcoal);}
-tr:last-child td{border-bottom:none;}
-tr:hover td{background:var(--warm);}
-
-/* ── BADGES ── */
-.badge{
-  display:inline-block;padding:3px 10px;border-radius:20px;
-  font-size:11px;font-family:var(--font-mono);font-weight:500;
-}
-.badge-sm{background:rgba(62,135,255,0.12);color:#2255cc;}
-.badge-cook{background:rgba(232,119,34,0.12);color:var(--terra);}
-.badge-tm{background:rgba(80,180,100,0.12);color:#1e7a36;}
-.badge-agm{background:rgba(228,0,43,0.12);color:var(--red);}
-
-/* ── BUTTONS ── */
-.btn{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:9px 18px;border-radius:9px;border:none;
-  font-family:var(--font-body);font-weight:500;font-size:13px;
-  cursor:pointer;transition:all .18s;
-}
-.btn-primary{background:var(--red);color:#fff;}
-.btn-primary:hover{background:var(--red-dark);}
-.btn-secondary{background:var(--warm);color:var(--charcoal);border:1px solid var(--border);}
-.btn-secondary:hover{background:#ffe8c8;}
-.btn-danger{background:rgba(228,0,43,0.1);color:var(--red);border:1px solid rgba(228,0,43,0.25);}
-.btn-danger:hover{background:rgba(228,0,43,0.2);}
-.btn-sm{padding:5px 12px;font-size:12px;}
-
-/* ── FORM ── */
-.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
-.form-group{display:flex;flex-direction:column;gap:6px;}
-.form-group label{font-size:12px;font-weight:500;color:var(--muted);font-family:var(--font-mono);}
-.form-group input,.form-group select{
-  padding:10px 13px;border-radius:9px;
-  border:1px solid var(--border);
-  font-family:var(--font-body);font-size:13px;
-  outline:none;background:#fff;
-  transition:border-color .2s;
-}
-.form-group input:focus,.form-group select:focus{border-color:var(--red);}
-
-/* ── SCHEDULE GRID ── */
-.sched-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;}
-.sched-day{
-  background:var(--card);border:1px solid var(--border);
-  border-radius:10px;padding:12px 10px;min-height:180px;
-}
-.sched-day-head{
-  font-family:var(--font-mono);font-size:11px;font-weight:500;
-  color:var(--muted);text-transform:uppercase;
-  padding-bottom:8px;border-bottom:1px solid var(--border);
-  margin-bottom:8px;display:flex;justify-content:space-between;
-}
-.sched-day-head .day-type{
-  font-size:9px;padding:2px 6px;border-radius:10px;
-  background:rgba(228,0,43,0.1);color:var(--red);
-}
-.shift-slot{
-  background:var(--warm);border-radius:7px;padding:6px 8px;
-  margin-bottom:6px;font-size:11px;border-left:3px solid var(--terra-lt);
-}
-.shift-slot.sm{border-left-color:var(--red);}
-.shift-slot.cook{border-left-color:var(--terra);}
-.shift-slot.empty{border-left-color:#ccc;background:#f8f4f0;color:var(--muted);font-style:italic;}
-.shift-time{font-family:var(--font-mono);font-size:10px;color:var(--muted);}
-.shift-name{font-weight:500;font-size:11px;margin-top:2px;}
-.shift-role{font-size:10px;color:var(--muted);}
-
-/* ── EXPIRY ── */
-.expiry-row td:last-child{font-weight:600;}
-.exp-green{color:#1e7a36;}
-.exp-orange{color:#c65d00;}
-.exp-red{color:var(--red);}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
-.dot-green{background:#2ea84b;}
-.dot-orange{background:#e87722;}
-.dot-red{background:var(--red);}
-
-/* ── MESSAGE ── */
-.msg-item{
-  background:var(--warm);border-radius:10px;padding:14px 16px;
-  margin-bottom:10px;border-left:3px solid var(--terra-lt);
-}
-.msg-meta{font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:6px;}
-.msg-body{font-size:13px;}
-
-/* ── AVAIL ── */
-.avail-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;}
-.avail-day{
-  background:var(--card);border:1px solid var(--border);
-  border-radius:10px;padding:10px;text-align:center;
-}
-.avail-day-name{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-bottom:8px;}
-.avail-emp{
-  background:var(--warm);border-radius:6px;padding:4px 6px;
-  font-size:11px;margin-bottom:4px;
-}
-
-/* ── EMPLOYEE DASH (user role) ── */
-.user-sched-card{
-  background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
-  border:1px solid var(--border);padding:20px;margin-bottom:14px;
-}
-.my-shift{
-  display:flex;align-items:center;gap:14px;
-  padding:12px 0;border-bottom:1px solid var(--border);
-}
-.my-shift:last-child{border-bottom:none;}
-.my-shift-day{
-  font-family:var(--font-head);font-size:22px;color:var(--red);width:40px;
-}
-.my-shift-info{flex:1;}
-.my-shift-time{font-family:var(--font-mono);font-size:12px;color:var(--muted);}
-
-/* ── MODAL ── */
-.modal-backdrop{
-  display:none;position:fixed;inset:0;
-  background:rgba(10,5,0,0.55);z-index:500;
-  align-items:center;justify-content:center;
-}
-.modal-backdrop.open{display:flex;}
-.modal{
-  background:#fff;border-radius:16px;width:480px;max-width:95vw;
-  box-shadow:0 20px 60px rgba(0,0,0,0.25);
-  max-height:90vh;overflow-y:auto;
-}
-.modal-head{
-  padding:20px 24px 0;display:flex;justify-content:space-between;align-items:center;
-}
-.modal-head h3{font-family:var(--font-head);font-size:24px;}
-.modal-close{
-  background:none;border:none;font-size:22px;cursor:pointer;
-  color:var(--muted);transition:color .15s;
-}
-.modal-close:hover{color:var(--red);}
-.modal-body{padding:20px 24px 24px;}
-
-/* ── TOASTS ── */
-#toasts{position:fixed;bottom:24px;right:24px;z-index:1000;display:flex;flex-direction:column;gap:8px;}
-.toast{
-  background:var(--charcoal);color:#fff;
-  border-radius:10px;padding:12px 18px;
-  font-size:13px;border-left:3px solid var(--red);
-  animation:slideIn .25s ease;max-width:300px;
-}
-.toast.success{border-left-color:#2ea84b;}
-.toast.warning{border-left-color:#e87722;}
-@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-
-/* ── TABS WITHIN SECTION ── */
-.inner-tabs{display:flex;gap:6px;margin-bottom:18px;}
-.inner-tab{
-  padding:7px 16px;border-radius:8px;border:1px solid var(--border);
-  font-size:12px;font-family:var(--font-mono);cursor:pointer;
-  background:#fff;color:var(--muted);transition:all .15s;
-}
-.inner-tab.active{background:var(--charcoal);color:#fff;border-color:var(--charcoal);}
-
-/* ── TOOLBAR ── */
-.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
-.toolbar input[type=text]{
-  flex:1;min-width:180px;padding:9px 13px;
-  border-radius:9px;border:1px solid var(--border);
-  font-size:13px;font-family:var(--font-body);outline:none;
-}
-.toolbar input:focus{border-color:var(--red);}
-
-/* ── AVAIL FORM ── */
-.day-avail-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
-.day-avail-row label{width:80px;font-size:12px;font-family:var(--font-mono);}
-.day-avail-row input[type=checkbox]{accent-color:var(--red);}
-.day-avail-row input[type=time]{
-  padding:5px 8px;border-radius:7px;border:1px solid var(--border);
-  font-size:12px;font-family:var(--font-mono);outline:none;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar{width:6px;height:6px;}
-::-webkit-scrollbar-track{background:transparent;}
-::-webkit-scrollbar-thumb{background:rgba(60,35,10,0.2);border-radius:6px;}
-
-@media(max-width:700px){
-  .sched-grid{grid-template-columns:1fr 1fr;}
-  .form-row{grid-template-columns:1fr;}
-  .stats-row{grid-template-columns:1fr 1fr;}
-  .avail-grid{grid-template-columns:1fr 1fr;}
-}
+:root{--red:#E8001C;--red-dark:#B0001A;--gold:#F5A623;--gold-light:#FFD27F;--dark:#1A1109;--dark2:#2C1D0E;--dark3:#3D2B15;--mid:#6B4C2A;--light:#C4A882;--lighter:#EDD9BE;--white:#FFFDF9;--green:#22C55E;--orange:#F97316;--blue:#3B82F6;--success:#16A34A;--danger:#DC2626;--sidebar-w:240px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Barlow',sans-serif;background:var(--dark);color:var(--white);min-height:100vh;overflow-x:hidden}
+#loading-screen{position:fixed;inset:0;z-index:9999;background:var(--dark);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;transition:opacity .5s}
+.loader-logo{font-family:'Barlow Condensed',sans-serif;font-size:52px;font-weight:900;color:var(--red);letter-spacing:3px}
+.loader-sub{color:var(--light);font-size:13px;letter-spacing:4px;text-transform:uppercase}
+.loader-bar{width:200px;height:3px;background:var(--dark3);border-radius:2px;overflow:hidden}
+.loader-fill{height:100%;background:var(--red);border-radius:2px;animation:loadfill 1.4s ease forwards}
+@keyframes loadfill{from{width:0}to{width:100%}}
+#login-page{display:none;position:fixed;inset:0;z-index:100;background:linear-gradient(135deg,var(--dark) 0%,var(--dark2) 50%,var(--dark3) 100%);align-items:center;justify-content:center}
+#login-page.active{display:flex}
+.login-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(20px);border-radius:20px;padding:48px 40px;width:100%;max-width:420px;box-shadow:0 32px 64px rgba(0,0,0,.5)}
+.login-brand{text-align:center;margin-bottom:36px}
+.login-brand .bucket{font-size:48px;margin-bottom:8px}
+.login-brand h1{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--white);letter-spacing:2px}
+.login-brand p{font-size:12px;color:var(--light);letter-spacing:3px;text-transform:uppercase;margin-top:4px}
+.login-divider{width:40px;height:2px;background:var(--red);margin:12px auto 0}
+.field-group{margin-bottom:18px}
+.field-group label{display:block;font-size:11px;color:var(--light);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;font-weight:600}
+.field-group input{width:100%;padding:13px 16px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:var(--white);font-family:'Barlow',sans-serif;font-size:15px;outline:none;transition:border-color .2s}
+.field-group input:focus{border-color:var(--gold)}
+.btn-login{width:100%;padding:14px;background:var(--red);color:white;font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;border-radius:10px;cursor:pointer;transition:background .2s;margin-top:8px}
+.btn-login:hover{background:var(--red-dark)}
+#login-error{color:#ff6b6b;font-size:13px;text-align:center;margin-top:12px;min-height:20px}
+.register-link{text-align:center;margin-top:18px;font-size:13px;color:var(--light)}
+.register-link a{color:var(--gold);text-decoration:none;font-weight:600;cursor:pointer}
+.modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px}
+.modal-overlay.active{display:flex}
+.modal-box{background:var(--dark2);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:36px 32px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;position:relative}
+.modal-title{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--white);margin-bottom:24px;letter-spacing:1px}
+.modal-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--light);font-size:22px;cursor:pointer}
+.modal-close:hover{color:var(--red)}
+#app{display:none;min-height:100vh}
+#app.active{display:flex}
+.sidebar{width:var(--sidebar-w);min-height:100vh;background:var(--dark2);border-right:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;position:fixed;left:0;top:0;z-index:50}
+.sidebar-logo{padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,.06)}
+.kfc-badge{display:flex;align-items:center;gap:12px}
+.kfc-text h2{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;color:var(--red);letter-spacing:1px}
+.kfc-text span{font-size:11px;color:var(--light)}
+.sidebar-user{padding:16px 20px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:12px}
+.user-avatar{width:38px;height:38px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:white;flex-shrink:0}
+.user-info .uname{font-size:13px;font-weight:600;color:var(--white)}
+.urole{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;padding:2px 7px;border-radius:20px;margin-top:3px;display:inline-block;font-weight:600}
+.urole-admin{background:rgba(232,0,28,.2);color:var(--red)}
+.urole-emp{background:rgba(245,166,35,.2);color:var(--gold)}
+.sidebar-nav{flex:1;padding:12px 0;overflow-y:auto}
+.nav-section-label{padding:10px 20px 4px;font-size:10px;color:var(--mid);letter-spacing:2px;text-transform:uppercase;font-weight:600}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 20px;font-size:14px;color:var(--lighter);cursor:pointer;border:none;background:none;width:100%;text-align:left;border-left:3px solid transparent;transition:all .15s;font-family:'Barlow',sans-serif;font-weight:500}
+.nav-item:hover{background:rgba(255,255,255,.04);color:var(--white)}
+.nav-item.active{background:rgba(232,0,28,.12);color:var(--white);border-left-color:var(--red)}
+.nav-item .icon{font-size:16px;width:20px;text-align:center}
+.sidebar-footer{padding:16px 20px;border-top:1px solid rgba(255,255,255,.06)}
+.btn-logout{width:100%;padding:10px;background:rgba(232,0,28,.12);border:1px solid rgba(232,0,28,.25);border-radius:8px;color:var(--red);font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .2s}
+.btn-logout:hover{background:var(--red);color:white}
+.main-content{margin-left:var(--sidebar-w);flex:1;min-height:100vh}
+.top-bar{padding:20px 32px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.02)}
+.top-bar h1{font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;letter-spacing:1px}
+.top-bar .tdate{font-size:13px;color:var(--light)}
+.page{display:none;padding:32px}
+.page.active{display:block}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:28px}
+.stat-card{background:var(--dark2);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px 22px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--ac,var(--red))}
+.stat-icon{font-size:28px;margin-bottom:10px}
+.stat-num{font-family:'Barlow Condensed',sans-serif;font-size:36px;font-weight:900;line-height:1}
+.stat-label{font-size:12px;color:var(--light);margin-top:4px;letter-spacing:1px;text-transform:uppercase}
+.card{background:var(--dark2);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:24px;margin-bottom:20px}
+.card-title{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:1px;margin-bottom:18px;display:flex;align-items:center;gap:8px}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;padding:10px 14px;font-size:11px;color:var(--light);letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.08);font-weight:600}
+td{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--lighter);vertical-align:middle}
+tr:hover td{background:rgba(255,255,255,.02)}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.b-red{background:rgba(232,0,28,.18);color:#ff6b7a}
+.b-gold{background:rgba(245,166,35,.18);color:var(--gold)}
+.b-blue{background:rgba(59,130,246,.18);color:#7db3ff}
+.b-green{background:rgba(34,197,94,.18);color:#4ade80}
+.btn{padding:9px 18px;border-radius:8px;border:none;cursor:pointer;font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-p{background:var(--red);color:white}.btn-p:hover{background:var(--red-dark)}
+.btn-g{background:rgba(255,255,255,.07);color:var(--lighter);border:1px solid rgba(255,255,255,.1)}.btn-g:hover{background:rgba(255,255,255,.12);color:var(--white)}
+.btn-d{background:rgba(220,38,38,.15);color:#ff6b6b;border:1px solid rgba(220,38,38,.3)}.btn-d:hover{background:var(--danger);color:white}
+.btn-w{background:rgba(245,166,35,.15);color:var(--gold);border:1px solid rgba(245,166,35,.3)}.btn-w:hover{background:var(--gold);color:var(--dark)}
+.btn-s{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}.btn-s:hover{background:var(--success);color:white}
+.btn-sm{padding:5px 11px;font-size:12px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.form-row.one{grid-template-columns:1fr}
+.fg{display:flex;flex-direction:column;gap:6px}
+.fg label{font-size:11px;color:var(--light);letter-spacing:1.5px;text-transform:uppercase;font-weight:600}
+.fg input,.fg select,.fg textarea{padding:10px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--white);font-family:'Barlow',sans-serif;font-size:14px;outline:none;transition:border-color .2s}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--gold)}
+.fg select option{background:var(--dark2)}
+.fg textarea{resize:vertical;min-height:80px}
+.filter-bar{display:flex;gap:12px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.sw{position:relative;flex:1;min-width:200px}
+.sw::before{content:'🔍';position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px}
+.si{width:100%;padding:9px 14px 9px 38px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--white);font-family:'Barlow',sans-serif;font-size:14px;outline:none}
+.si:focus{border-color:var(--gold)}
+.week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.day-col{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;overflow:hidden}
+.day-header{padding:10px 8px;text-align:center;border-bottom:1px solid rgba(255,255,255,.06)}
+.day-name{font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700}
+.shift-slot{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04)}
+.shift-time{font-size:9px;color:var(--gold);font-weight:600;text-transform:uppercase}
+.shift-emp{font-size:11px;color:var(--lighter);margin-top:2px}
+.shift-role{font-size:10px;color:var(--light)}
+.btn-add-shift{width:100%;padding:6px;background:none;border:1px dashed rgba(255,255,255,.1);border-radius:6px;color:var(--mid);font-size:11px;cursor:pointer;margin:6px 0;transition:all .15s}
+.btn-add-shift:hover{border-color:var(--red);color:var(--red)}
+.edot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.e-green{background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.5)}
+.e-orange{background:var(--orange);box-shadow:0 0 6px rgba(249,115,22,.5)}
+.e-red{background:var(--red);box-shadow:0 0 6px rgba(232,0,28,.5)}
+.msg-item{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:16px;margin-bottom:12px}
+.msg-item.unread{border-left:3px solid var(--gold)}
+.avail-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
+.avail-day{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 10px;text-align:center}
+.avail-day.on{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25)}
+.avail-day .dn{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;margin-bottom:8px}
+.avail-check{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;color:var(--light);margin-bottom:8px;cursor:pointer}
+.avail-times{display:flex;flex-direction:column;gap:4px}
+.avail-times input{padding:5px 8px;font-size:11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:6px;color:var(--white);outline:none;font-family:'Barlow',sans-serif;width:100%}
+.order-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.order-item{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px}
+.oqty{display:flex;align-items:center;gap:8px}
+.qbtn{width:28px;height:28px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:var(--white);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.qbtn:hover{background:var(--red);border-color:var(--red)}
+.alert-b{background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.3);border-radius:10px;padding:12px 16px;margin-bottom:12px;font-size:13px;color:var(--gold-light);display:flex;align-items:center;gap:10px}
+#toast-c{position:fixed;bottom:24px;right:24px;z-index:9000;display:flex;flex-direction:column;gap:10px}
+.toast{background:var(--dark3);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 18px;font-size:14px;color:var(--white);min-width:260px;box-shadow:0 8px 32px rgba(0,0,0,.4);animation:slin .3s ease;display:flex;align-items:center;gap:10px}
+.toast.success{border-left:3px solid var(--green)}
+.toast.error{border-left:3px solid var(--red)}
+.toast.info{border-left:3px solid var(--blue)}
+@keyframes slin{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.empty{text-align:center;padding:40px;color:var(--mid)}
+.empty .ei{font-size:40px;margin-bottom:12px}
+.ac{display:flex;gap:6px;flex-wrap:wrap}
+@media(max-width:768px){.sidebar{transform:translateX(-100%)}.main-content{margin-left:0}.week-grid{grid-template-columns:repeat(2,1fr)}.avail-grid{grid-template-columns:repeat(2,1fr)}.order-grid{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="login-screen">
+<div id="loading-screen">
+  <div class="loader-logo">🍗 KFC</div>
+  <div class="loader-sub">Store Management System</div>
+  <div class="loader-bar"><div class="loader-fill"></div></div>
+</div>
+
+<div id="login-page">
   <div class="login-card">
-    <div class="login-logo">KFC 1416</div>
-    <div class="login-sub">Store Management System</div>
-    <input type="email" id="li-email" placeholder="Email address" autocomplete="off"/>
-    <input type="password" id="li-pass" placeholder="Password"/>
-    <button class="btn-login" onclick="doLogin()">SIGN IN</button>
-    <div class="login-err" id="li-err"></div>
-    <p style="color:rgba(255,248,240,0.25);font-size:11px;margin-top:18px;font-family:var(--font-mono);">
-      Admin: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="38595c55515678535e5b090c090e165b59">[email&#160;protected]</a> / admin123<br>
-      Staff: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="12747b6061667c737f7752797471232623243c7173">[email&#160;protected]</a> / staff123
-    </p>
-  </div>
-</div>
-
-<!-- APP SHELL -->
-<div id="app" style="display:none;flex-direction:column;">
-  <header>
-    <span class="header-logo">🍗 KFC 1416</span>
-    <div class="header-right">
-      <span class="header-user" id="header-user-label"></span>
-      <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+    <div class="login-brand">
+      <div class="bucket">🍗</div>
+      <h1>1416 KFC</h1>
+      <p>Store Management</p>
+      <div class="login-divider" style="width:40px;height:2px;background:var(--red);margin:12px auto 0"></div>
     </div>
-  </header>
-  <nav id="main-nav"></nav>
-  <main id="main-content"></main>
-</div>
-
-<!-- MODAL -->
-<div class="modal-backdrop" id="modal-backdrop">
-  <div class="modal" id="modal-box">
-    <div class="modal-head">
-      <h3 id="modal-title">Title</h3>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="field-group">
+      <label>Email Address</label>
+      <input type="email" id="li-email" placeholder="your@email.com" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
-    <div class="modal-body" id="modal-body"></div>
+    <div class="field-group">
+      <label>Password</label>
+      <input type="password" id="li-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-login" onclick="doLogin()">Sign In</button>
+    <div id="login-error"></div>
+    <div class="register-link">New employee? <a onclick="openM('reg-modal')">Request Access</a></div>
   </div>
 </div>
 
-<!-- TOASTS -->
-<div id="toasts"></div>
-
-<!-- FIREBASE -->
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-         signOut, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs,
-         addDoc, deleteDoc, updateDoc, onSnapshot, query, orderBy, serverTimestamp }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey:"AIzaSyBdujq0sn6pQGZktiAyaeTntGlfQ8MYVP4",
-  authDomain:"ottawa-deals.firebaseapp.com",
-  projectId:"ottawa-deals",
-  storageBucket:"ottawa-deals.firebasestorage.app",
-  messagingSenderId:"468903353105",
-  appId:"1:468903353105:web:864ea92efea5c5c6bc0ab0",
-  measurementId:"G-L06FJJ1D5E"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db   = getFirestore(app);
-
-// ── SEED DATA ──
-const SEED_EMPLOYEES = [
-  {id:"60014143",name:"Adedunye, Damilola Priscilla",role:"Team Member",pos:"Customer Service Team Member",rate:17.60,site:"1416"},
-  {id:"60014179",name:"Aghwach, Adam",role:"Team Member",pos:"Food Service Team Member",rate:17.60,site:"1408"},
-  {id:"60015525",name:"Appidi, Nandakishore",role:"Team Member",pos:"Customer Service Team Member",rate:17.60,site:"1416"},
-  {id:"60009331",name:"Beathimantakath, Afeefurahman",role:"Shift Manager",pos:"Shift Manager",rate:18.60,site:"1406"},
-  {id:"60017072",name:"Belarbi, Anes Abdelmalek",role:"Team Member",pos:"Food Service Team Member",rate:17.60,site:"1416"},
-  {id:"60014150",name:"Bennis, Marwa",role:"Team Member",pos:"Customer Service Team Member",rate:17.60,site:"1416"},
-  {id:"60013386",name:"Bouhoula, Mohamed Hedi",role:"AGM",pos:"Assistant General Manager",rate:19.76,site:"1416"},
-  {id:"1102240",name:"Figueroa Padron, Jorge",role:"Team Member",pos:"Food Service Team Member",rate:17.60,site:"1416"},
-  {id:"60011381",name:"Gilotra, Arjun",role:"Shift Manager",pos:"Shift Manager",rate:18.60,site:"1416"},
-  {id:"1411116",name:"Hashim, Agil",role:"Team Member",pos:"Customer Service Team Member",rate:17.60,site:"1420"},
-  {id:"60015363",name:"Johny, Albin",role:"Team Member",pos:"Customer Service Worker 1",rate:17.60,site:"1407"},
-  {id:"60016591",name:"Khandelwal, Sunny",role:"Team Member",pos:"Food Service Team Member",rate:17.60,site:"1416"},
-  {id:"60016834",name:"Legault-Agil, Alyza",role:"Team Member",pos:"Customer Service Team Member",rate:16.60,site:"1416"},
-  {id:"60015628",name:"Saaji, Brinto",role:"Team Member",pos:"Customer Service Team Member",rate:17.70,site:"1416"},
-  {id:"545660",name:"Shaheen, Ghazala",role:"Shift Manager",pos:"Shift Manager",rate:18.60,site:"1416"},
-  {id:"60012946",name:"Singh, Amardeep",role:"Team Member",pos:"Customer Service Team Member",rate:17.20,site:"1420"},
-  {id:"60015796",name:"Singh, Harshdeep",role:"Team Member",pos:"Food Service Team Member",rate:17.60,site:"1421"},
-  {id:"60007859",name:"Singh, Jasmeet",role:"Shift Manager",pos:"Shift Manager",rate:18.60,site:"1408"},
-  {id:"60011402",name:"Tiwari, Balveer",role:"Shift Manager",pos:"Shift Manager",rate:18.60,site:"1420"},
-];
-
-// ── STATE ──
-window.STATE = {
-  user: null, role: null, uid: null,
-  employees: [], schedules: {}, availability: {}, products: [], messages: [],
-  currentWeek: getWeekStart(new Date()),
-};
-
-function getWeekStart(d){
-  const dt=new Date(d); const day=dt.getDay();
-  const diff=dt.getDate()-day+(day===0?-6:1);
-  dt.setDate(diff); dt.setHours(0,0,0,0); return dt;
-}
-function fmtDate(d){return d.toISOString().split('T')[0];}
-function shortName(n){const p=n.split(',');return p.length>1?p[1].trim().split(' ')[0]:n.split(' ')[0];}
-
-// ── AUTH ──
-window.doLogin = async function(){
-  const email=document.getElementById('li-email').value.trim();
-  const pass=document.getElementById('li-pass').value;
-  const errEl=document.getElementById('li-err');
-  errEl.textContent='';
-  try{
-    const cred = await signInWithEmailAndPassword(auth,email,pass);
-    // Store the REAL Firebase UID - this is the Firestore doc key for availability
-    STATE.firebaseUid = cred.user.uid;
-    STATE.uid = cred.user.uid;
-    const snap = await getDoc(doc(db,'users',cred.user.uid));
-    if(snap.exists()){
-      STATE.role=snap.data().role||'employee';
-      STATE.user=snap.data();
-    } else {
-      STATE.role=email==='admin@kfc1416.ca'?'admin':'employee';
-      STATE.user={name:email,email};
-    }
-    await showApp();
-  }catch(e){
-    // Admin demo fallback only
-    if(email==='admin@kfc1416.ca'&&pass==='admin123'){
-      STATE.role='admin';STATE.user={name:'Mohamed Hedi Bouhoula',email};
-      STATE.uid='demo_admin';STATE.firebaseUid='demo_admin';
-      await ensureSeedData();
-      await showApp();
-    } else {
-      const code=e.code||'';
-      if(code.includes('user-not-found')||code.includes('invalid-credential'))
-        errEl.textContent='Account not found. Ask your manager to register you.';
-      else if(code.includes('wrong-password'))
-        errEl.textContent='Wrong password.';
-      else
-        errEl.textContent='Login failed. Check your email and password.';
-    }
-  }
-};
-
-window.doLogout = function(){
-  signOut(auth).catch(()=>{});
-  STATE.user=null;STATE.role=null;STATE.uid=null;STATE.firebaseUid=null;STATE.myAvailData=null;
-  document.getElementById('app').style.display='none';
-  document.getElementById('login-screen').style.display='flex';
-};
-
-async function ensureSeedData(){
-  // load from local state if Firebase not available
-  if(STATE.employees.length===0) STATE.employees=[...SEED_EMPLOYEES];
-}
-
-async function loadEmployees(){
-  try{
-    const snap=await getDocs(collection(db,'employees_1416'));
-    if(snap.empty){
-      // seed
-      for(const emp of SEED_EMPLOYEES){
-        await setDoc(doc(db,'employees_1416',emp.id),emp);
-      }
-      STATE.employees=[...SEED_EMPLOYEES];
-    } else {
-      STATE.employees=snap.docs.map(d=>({...d.data(),_fid:d.id}));
-    }
-  }catch(e){ STATE.employees=[...SEED_EMPLOYEES]; }
-}
-
-async function loadProducts(){
-  try{
-    const snap=await getDocs(collection(db,'products_1416'));
-    STATE.products=snap.docs.map(d=>({...d.data(),_fid:d.id}));
-  }catch(e){
-    STATE.products=[
-      {name:'Original Recipe Chicken',expiry:'2026-04-12',_fid:'p1'},
-      {name:'Coleslaw Mix',expiry:'2026-04-11',_fid:'p2'},
-      {name:'Zinger Patties',expiry:'2026-04-15',_fid:'p3'},
-      {name:'Gravy Sauce',expiry:'2026-04-10',_fid:'p4'},
-      {name:'Popcorn Chicken',expiry:'2026-04-13',_fid:'p5'},
-    ];
-  }
-}
-
-async function loadMessages(){
-  try{
-    const snap=await getDocs(query(collection(db,'messages_1416'),orderBy('ts','desc')));
-    STATE.messages=snap.docs.map(d=>({...d.data(),_fid:d.id}));
-  }catch(e){ STATE.messages=[]; }
-}
-
-async function loadSchedule(){
-  try{
-    const weekKey=fmtDate(STATE.currentWeek);
-    const snap=await getDoc(doc(db,'schedules_1416',weekKey));
-    STATE.schedules[weekKey]=snap.exists()?snap.data().days:{};
-  }catch(e){ STATE.schedules[fmtDate(STATE.currentWeek)]={}; }
-}
-
-async function loadAvailability(){
-  try{
-    const snap=await getDocs(collection(db,'availability_1416'));
-    const avail={};
-    snap.docs.forEach(d=>{ avail[d.id]=d.data(); });
-    STATE.availability=avail;
-  }catch(e){ STATE.availability={}; }
-}
-
-// Load the current user's OWN availability doc (by real Firebase UID)
-async function loadMyAvailability(){
-  if(!STATE.firebaseUid) return;
-  try{
-    const snap=await getDoc(doc(db,'availability_1416', STATE.firebaseUid));
-    if(snap.exists()){
-      STATE.myAvailData = snap.data();       // {name, days, submitted, locked}
-    } else {
-      STATE.myAvailData = null;
-    }
-  }catch(e){ STATE.myAvailData=null; }
-}
-
-// ── SHOW APP ──
-async function showApp(){
-  document.getElementById('login-screen').style.display='none';
-  const appEl=document.getElementById('app');
-  appEl.style.display='flex';
-  document.getElementById('header-user-label').textContent=
-    (STATE.user?.name||STATE.user?.email||'')+ ' · '+(STATE.role==='admin'?'Admin':'Employee');
-  if(STATE.role==='admin'){
-    await Promise.all([loadEmployees(),loadProducts(),loadMessages(),loadSchedule(),loadAvailability()]);
-  } else {
-    // Employee: load their own availability doc using their real Firebase UID
-    await Promise.all([loadSchedule(),loadMyAvailability()]);
-  }
-  buildNav();
-  navigate(STATE.role==='admin'?'dashboard':'my-schedule');
-}
-
-// ── NAV ──
-const ADMIN_TABS=[
-  {id:'dashboard',label:'Dashboard'},
-  {id:'employees',label:'Employees'},
-  {id:'schedule',label:'Schedule Builder'},
-  {id:'availability',label:'Availability'},
-  {id:'expiry',label:'Expiry Tracker'},
-  {id:'messages',label:'Messages'},
-  {id:'order',label:'Order Planner'},
-];
-const EMP_TABS=[
-  {id:'my-schedule',label:'My Schedule'},
-  {id:'my-availability',label:'My Availability'},
-  {id:'my-message',label:'Message Manager'},
-];
-
-function buildNav(){
-  const nav=document.getElementById('main-nav');
-  const tabs=STATE.role==='admin'?ADMIN_TABS:EMP_TABS;
-  nav.innerHTML=tabs.map(t=>`<button data-tab="${t.id}" onclick="navigate('${t.id}')">${t.label}</button>`).join('');
-}
-
-window.navigate = function(tabId){
-  document.querySelectorAll('nav button').forEach(b=>{
-    b.classList.toggle('active',b.dataset.tab===tabId);
-  });
-  const el=document.getElementById('main-content');
-  const renders={
-    'dashboard':renderDashboard,
-    'employees':renderEmployees,
-    'schedule':renderSchedule,
-    'availability':renderAvailability,
-    'expiry':renderExpiry,
-    'messages':renderMessages,
-    'order':renderOrder,
-    'my-schedule':renderMySchedule,
-    'my-availability':renderMyAvailability,
-    'my-message':renderMyMessage,
-  };
-  if(renders[tabId]) el.innerHTML=renders[tabId]();
-  attachTabHandlers(tabId);
-};
-
-function attachTabHandlers(tabId){
-  if(tabId==='employees') attachEmployeeHandlers();
-  if(tabId==='expiry') attachExpiryHandlers();
-  if(tabId==='messages') attachMessageHandlers();
-  if(tabId==='schedule') attachScheduleHandlers();
-  if(tabId==='my-availability') attachMyAvailHandlers();
-  if(tabId==='my-message') attachMyMsgHandlers();
-}
-
-// ── DASHBOARD ──
-function renderDashboard(){
-  const sms=STATE.employees.filter(e=>e.role==='Shift Manager').length;
-  const tms=STATE.employees.filter(e=>e.role==='Team Member').length;
-  const today=new Date(); today.setHours(0,0,0,0);
-  const expiring=STATE.products.filter(p=>{
-    const d=new Date(p.expiry);d.setHours(0,0,0,0);
-    const diff=Math.ceil((d-today)/(86400000));
-    return diff<=3&&diff>=0;
-  }).length;
-  const expired=STATE.products.filter(p=>new Date(p.expiry)<today).length;
-  const pending=Object.keys(STATE.availability).length;
-
-  return `
-  <div class="section-title">Dashboard</div>
-  <div class="section-sub">KFC Store 1416 — Kanata, Ottawa</div>
-  <div class="stats-row">
-    <div class="stat-card"><div class="stat-num">${STATE.employees.length}</div><div class="stat-label">TOTAL STAFF</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--terra)">${sms}</div><div class="stat-label">SHIFT MANAGERS</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:#2255cc">${tms}</div><div class="stat-label">TEAM MEMBERS</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:${expiring>0?'#e87722':'#2ea84b'}">${expiring}</div><div class="stat-label">EXPIRING SOON</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:${expired>0?'var(--red)':'#2ea84b'}">${expired}</div><div class="stat-label">EXPIRED ITEMS</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--muted)">${pending}</div><div class="stat-label">AVAIL. SUBMITTED</div></div>
+<!-- REGISTER -->
+<div class="modal-overlay" id="reg-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeM('reg-modal')">✕</button>
+    <div class="modal-title">🆕 Request Access</div>
+    <div class="form-row"><div class="fg"><label>First Name</label><input type="text" id="r-first" placeholder="First"></div><div class="fg"><label>Last Name</label><input type="text" id="r-last" placeholder="Last"></div></div>
+    <div class="form-row one"><div class="fg"><label>Email</label><input type="email" id="r-email" placeholder="you@email.com"></div></div>
+    <div class="form-row one"><div class="fg"><label>Password (min 6)</label><input type="password" id="r-pass" placeholder="••••••••"></div></div>
+    <div class="form-row"><div class="fg"><label>Employee ID</label><input type="text" id="r-eid" placeholder="e.g. 60014143"></div><div class="fg"><label>Position</label><select id="r-role"><option value="Team Member">Team Member</option><option value="Cook">Cook / Food Service</option><option value="Shift Manager">Shift Manager</option></select></div></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="doRegister()">Create Account</button>
+    <div id="r-err" style="color:#ff6b6b;font-size:13px;text-align:center;margin-top:10px"></div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;flex-wrap:wrap">
-    <div class="card">
-      <div class="card-title">Quick Actions</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <button class="btn btn-primary" onclick="navigate('schedule')">📅 Build This Week's Schedule</button>
-        <button class="btn btn-secondary" onclick="navigate('employees')">👥 Manage Employees</button>
-        <button class="btn btn-secondary" onclick="navigate('expiry')">🟠 Check Expiry Alerts</button>
-        <button class="btn btn-secondary" onclick="navigate('order')">📦 Plan Sysco Order</button>
+</div>
+
+<!-- CREATE ACCOUNT FOR EMPLOYEE -->
+<div class="modal-overlay" id="cre-modal">
+  <div class="modal-box" style="max-width:440px">
+    <button class="modal-close" onclick="closeM('cre-modal')">✕</button>
+    <div class="modal-title">🔑 Create Firebase Account</div>
+    <p style="font-size:13px;color:var(--light);margin-bottom:18px">This will create a login in Firebase so the employee can access the system.</p>
+    <div id="cre-info" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:14px 16px;margin-bottom:18px;font-size:14px;color:var(--lighter)"></div>
+    <input type="hidden" id="cre-eid">
+    <div class="form-row one"><div class="fg"><label>Email Address</label><input type="email" id="cre-email" placeholder="employee@email.com"></div></div>
+    <div class="form-row one"><div class="fg"><label>Password (min 6 chars)</label><input type="password" id="cre-pass" value="KFC1416!"></div></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="createAccForEmp()">✅ Create Account in Firebase</button>
+    <div id="cre-err" style="color:#ff6b6b;font-size:13px;text-align:center;margin-top:10px"></div>
+  </div>
+</div>
+
+<!-- EDIT EMP -->
+<div class="modal-overlay" id="edit-emp-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeM('edit-emp-modal')">✕</button>
+    <div class="modal-title">✏️ Edit Employee</div>
+    <input type="hidden" id="ee-id">
+    <div class="form-row"><div class="fg"><label>First Name</label><input type="text" id="ee-first"></div><div class="fg"><label>Last Name</label><input type="text" id="ee-last"></div></div>
+    <div class="form-row"><div class="fg"><label>Employee ID</label><input type="text" id="ee-eid"></div><div class="fg"><label>Home Site</label><input type="text" id="ee-site"></div></div>
+    <div class="form-row one"><div class="fg"><label>Position</label><select id="ee-role"><option value="Team Member">Team Member</option><option value="Cook">Cook / Food Service</option><option value="Shift Manager">Shift Manager</option><option value="Assistant General Manager">Assistant General Manager</option></select></div></div>
+    <div class="form-row one"><div class="fg"><label>Hourly Rate ($)</label><input type="number" id="ee-rate" step="0.01"></div></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="saveEditEmp()">Save Changes</button>
+  </div>
+</div>
+
+<!-- ADD EMP -->
+<div class="modal-overlay" id="add-emp-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeM('add-emp-modal')">✕</button>
+    <div class="modal-title">➕ Add Employee</div>
+    <div class="form-row"><div class="fg"><label>First Name</label><input type="text" id="ae-first"></div><div class="fg"><label>Last Name</label><input type="text" id="ae-last"></div></div>
+    <div class="form-row"><div class="fg"><label>Employee ID</label><input type="text" id="ae-eid"></div><div class="fg"><label>Home Site</label><input type="text" id="ae-site"></div></div>
+    <div class="form-row"><div class="fg"><label>Position</label><select id="ae-role"><option value="Team Member">Team Member</option><option value="Cook">Cook / Food Service</option><option value="Shift Manager">Shift Manager</option><option value="Assistant General Manager">Assistant General Manager</option></select></div><div class="fg"><label>Rate ($/hr)</label><input type="number" id="ae-rate" step="0.01" value="17.60"></div></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="addEmp()">Add Employee</button>
+  </div>
+</div>
+
+<!-- ADD SHIFT -->
+<div class="modal-overlay" id="add-shift-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeM('add-shift-modal')">✕</button>
+    <div class="modal-title" id="ast-title">➕ Add Shift</div>
+    <input type="hidden" id="ast-date">
+    <div class="form-row"><div class="fg"><label>Employee</label><select id="ast-emp"></select></div><div class="fg"><label>Role</label><select id="ast-role"><option value="Shift Manager">Shift Manager</option><option value="Cook">Cook</option><option value="Team Member">Team Member</option></select></div></div>
+    <div class="form-row"><div class="fg"><label>Start</label><input type="time" id="ast-start" value="09:30"></div><div class="fg"><label>End</label><input type="time" id="ast-end" value="17:00"></div></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="saveShift()">Add Shift</button>
+  </div>
+</div>
+
+<!-- ADD PRODUCT -->
+<div class="modal-overlay" id="add-prod-modal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeM('add-prod-modal')">✕</button>
+    <div class="modal-title">📦 Add Product</div>
+    <div class="form-row one"><div class="fg"><label>Product Name</label><input type="text" id="ap-name" placeholder="e.g. Chicken Breast"></div></div>
+    <div class="form-row"><div class="fg"><label>Expiry Date</label><input type="date" id="ap-exp"></div><div class="fg"><label>Quantity</label><input type="number" id="ap-qty" value="1" min="1"></div></div>
+    <div class="form-row one"><div class="fg"><label>Category</label><select id="ap-cat"><option>Chicken</option><option>Sauces</option><option>Sides</option><option>Beverages</option><option>Packaging</option><option>Other</option></select></div></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="addProduct()">Add Product</button>
+  </div>
+</div>
+
+<div id="app">
+  <nav class="sidebar">
+    <div class="sidebar-logo"><div class="kfc-badge"><span style="font-size:32px">🍗</span><div class="kfc-text"><h2>1416 KFC</h2><span>Management System</span></div></div></div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="ua">?</div>
+      <div class="user-info"><div class="uname" id="un">—</div><div class="urole" id="ur">—</div></div>
+    </div>
+    <div class="sidebar-nav" id="snav"></div>
+    <div class="sidebar-footer"><button class="btn-logout" onclick="doLogout()">⇤ Sign Out</button></div>
+  </nav>
+  <div class="main-content">
+    <div class="top-bar"><h1 id="ptitle">Dashboard</h1><div class="tdate" id="tdate"></div></div>
+
+    <!-- ADMIN DASHBOARD -->
+    <div class="page" id="page-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card" style="--ac:var(--red)"><div class="stat-icon">👥</div><div class="stat-num" id="s-emp">0</div><div class="stat-label">Total Staff</div></div>
+        <div class="stat-card" style="--ac:var(--gold)"><div class="stat-icon">📅</div><div class="stat-num" id="s-shifts">0</div><div class="stat-label">Shifts This Week</div></div>
+        <div class="stat-card" style="--ac:var(--orange)"><div class="stat-icon">⚠️</div><div class="stat-num" id="s-exp">0</div><div class="stat-label">Expiring Soon</div></div>
+        <div class="stat-card" style="--ac:var(--blue)"><div class="stat-icon">✉️</div><div class="stat-num" id="s-msg">0</div><div class="stat-label">Unread Messages</div></div>
+      </div>
+      <div class="card"><div class="card-title">⚠️ Expiry Alerts</div><div id="dash-alerts"></div></div>
+      <div class="card"><div class="card-title">📋 Today's Schedule</div><div id="dash-today"></div></div>
+    </div>
+
+    <!-- EMPLOYEES -->
+    <div class="page" id="page-employees">
+      <div class="filter-bar">
+        <div class="sw"><input class="si" type="text" id="es" placeholder="Search employees..." oninput="renderEmps()"></div>
+        <select style="padding:9px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--lighter);outline:none;font-family:'Barlow',sans-serif" id="ef" onchange="renderEmps()">
+          <option value="">All Roles</option><option value="Shift Manager">Shift Manager</option><option value="Cook">Cook</option><option value="Team Member">Team Member</option><option value="Assistant General Manager">Asst. GM</option>
+        </select>
+        <button class="btn btn-p" onclick="openM('add-emp-modal')">➕ Add Employee</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>ID</th><th>Site</th><th>Position</th><th>Rate</th><th>Account Status</th><th>Actions</th></tr></thead>
+        <tbody id="emp-tbody"></tbody>
+      </table></div></div>
+    </div>
+
+    <!-- SCHEDULE -->
+    <div class="page" id="page-schedule">
+      <div class="filter-bar">
+        <button class="btn btn-g" onclick="prevWeek()">← Prev</button>
+        <span id="wklabel" style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;flex:1;text-align:center"></span>
+        <button class="btn btn-g" onclick="nextWeek()">Next →</button>
+        <button class="btn btn-p" onclick="autoSchedule()">⚡ Auto-Schedule</button>
+        <button class="btn btn-g" onclick="window.print()">🖨️ Print</button>
+      </div>
+      <div id="sched-val" style="margin-bottom:16px"></div>
+      <div class="week-grid" id="wgrid"></div>
+    </div>
+
+    <!-- PRODUCTS -->
+    <div class="page" id="page-products">
+      <div class="filter-bar">
+        <div class="sw"><input class="si" type="text" id="ps" placeholder="Search products..." oninput="renderProds()"></div>
+        <button class="btn btn-p" onclick="openM('add-prod-modal')">➕ Add Product</button>
+      </div>
+      <div id="prod-alerts" style="margin-bottom:4px"></div>
+      <div class="card"><div class="card-title">📦 Inventory & Expiry</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Status</th><th>Product</th><th>Category</th><th>Qty</th><th>Expiry</th><th>Days Left</th><th>Actions</th></tr></thead>
+          <tbody id="prod-tbody"></tbody>
+        </table></div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">Team Composition</div>
-      ${renderRoleBreakdown()}
+
+    <!-- ORDERS -->
+    <div class="page" id="page-orders">
+      <div class="card"><div class="card-title">🛒 Sysco Order Planning</div>
+        <div id="ord-info" style="margin-bottom:16px"></div>
+        <div class="order-grid" id="ord-list"></div>
+        <div style="margin-top:20px;display:flex;gap:12px">
+          <button class="btn btn-p" onclick="genOrder()">⚡ Suggest Order</button>
+          <button class="btn btn-g" onclick="saveOrder()">💾 Save Order</button>
+        </div>
+      </div>
+      <div class="card"><div class="card-title">🗂️ Previous Orders</div><div id="prev-ords"></div></div>
     </div>
-  </div>`;
+
+    <!-- MESSAGES -->
+    <div class="page" id="page-messages">
+      <div class="card"><div class="card-title">✉️ Employee Messages <span style="font-size:12px;color:var(--light);font-weight:400">(Confidential)</span></div>
+        <div id="msgs-list"></div>
+      </div>
+    </div>
+
+    <!-- EMP DASHBOARD -->
+    <div class="page" id="page-emp-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card" style="--ac:var(--red)"><div class="stat-icon">📅</div><div class="stat-num" id="my-sc">0</div><div class="stat-label">My Shifts This Week</div></div>
+        <div class="stat-card" style="--ac:var(--gold)"><div class="stat-icon">⏱️</div><div class="stat-num" id="my-hr">0h</div><div class="stat-label">Scheduled Hours</div></div>
+      </div>
+      <div class="card"><div class="card-title">📋 My Schedule</div><div id="my-sched"></div></div>
+    </div>
+
+    <!-- EMP AVAILABILITY -->
+    <div class="page" id="page-emp-avail">
+      <div class="card"><div class="card-title">📅 My Availability</div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:20px">Check days you're available and set preferred hours.</p>
+        <div class="avail-grid" id="avail-g"></div>
+        <button class="btn btn-p" style="margin-top:20px" onclick="saveAvail()">💾 Save Availability</button>
+      </div>
+    </div>
+
+    <!-- EMP MESSAGES -->
+    <div class="page" id="page-emp-msg">
+      <div class="card"><div class="card-title">✉️ Message the Manager</div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:16px">Messages are confidential — only the store manager can read them.</p>
+        <div style="display:flex;gap:12px">
+          <textarea id="emp-msg-txt" style="flex:1;padding:12px 14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:var(--white);font-family:'Barlow',sans-serif;font-size:14px;resize:none;height:90px;outline:none" placeholder="Type your message..."></textarea>
+          <button class="btn btn-p" style="align-self:flex-end" onclick="sendEmpMsg()">📨 Send</button>
+        </div>
+        <div style="margin-top:24px"><div class="card-title" style="margin-bottom:12px">📤 My Sent Messages</div><div id="my-msgs"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-c"></div>
+
+<script>
+// ── FIREBASE ──────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyBdujq0sn6pQGZktiAyaeTntGlfQ8MYVP4",
+  authDomain: "ottawa-deals.firebaseapp.com",
+  projectId: "ottawa-deals",
+  storageBucket: "ottawa-deals.firebasestorage.app",
+  messagingSenderId: "468903353105",
+  appId: "1:468903353105:web:864ea92efea5c5c6bc0ab0",
+  measurementId: "G-L06FJJ1D5E"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+const ADMIN_EMAIL = 'bouhoula.hedi@kfc1416.com';
+
+// ── STATE ─────────────────────────────────────────
+let CU = null, CUD = null, isAdmin = false;
+let employees = [], schedData = {}, products = [], messages = [];
+let weekOff = 0, ordQty = {};
+
+// ── HELPERS ───────────────────────────────────────
+function toast(msg, type='info') {
+  const c = document.getElementById('toast-c');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.innerHTML = `<span>${{info:'ℹ️',success:'✅',error:'❌'}[type]||'ℹ️'}</span> ${msg}`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 4500);
+}
+const fd = d => d.toISOString().split('T')[0];
+function getWeekDays() {
+  const n = new Date(); n.setDate(n.getDate() + weekOff*7);
+  const diff = n.getDay()===0 ? -6 : 1-n.getDay();
+  const mon = new Date(n); mon.setDate(n.getDate()+diff);
+  return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return d; });
+}
+function dl(s) { const n=new Date(); n.setHours(0,0,0,0); return Math.floor((new Date(s+'T00:00:00')-n)/86400000); }
+function exSt(d) { return d<0?'red':d<=3?'orange':'green'; }
+function ini(n) { return (n||'').split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?'; }
+function openM(id) { document.getElementById(id).classList.add('active'); }
+function closeM(id) { document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('active'); }));
+
+// ── AUTH ──────────────────────────────────────────
+function doLogin() {
+  const email = document.getElementById('li-email').value.trim();
+  const pass  = document.getElementById('li-pass').value;
+  const err   = document.getElementById('login-error');
+  err.textContent = '';
+  if (!email||!pass) { err.textContent='Please enter your email and password.'; return; }
+  auth.signInWithEmailAndPassword(email, pass).catch(e => {
+    err.textContent = {'auth/user-not-found':'No account found.','auth/wrong-password':'Incorrect password.','auth/invalid-credential':'Invalid email or password.','auth/too-many-requests':'Too many attempts. Try again later.'}[e.code] || e.message;
+  });
 }
 
-function renderRoleBreakdown(){
-  const roles={};
-  STATE.employees.forEach(e=>{roles[e.role]=(roles[e.role]||0)+1;});
-  return Object.entries(roles).map(([r,c])=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
-      <span>${r}</span><span class="badge ${getBadgeClass(r)}">${c}</span>
+function doRegister() {
+  const first=document.getElementById('r-first').value.trim(), last=document.getElementById('r-last').value.trim();
+  const email=document.getElementById('r-email').value.trim(), pass=document.getElementById('r-pass').value;
+  const eid=document.getElementById('r-eid').value.trim(), role=document.getElementById('r-role').value;
+  const err=document.getElementById('r-err'); err.textContent='';
+  if (!first||!last||!email||!pass) { err.textContent='All fields required.'; return; }
+  if (pass.length<6) { err.textContent='Password must be 6+ characters.'; return; }
+  auth.createUserWithEmailAndPassword(email, pass).then(c =>
+    db.collection('users').doc(c.user.uid).set({firstName:first,lastName:last,email,employeeId:eid,role,isAdmin:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()})
+  ).then(() => { closeM('reg-modal'); toast('Account created! Sign in now.','success'); })
+  .catch(e => { err.textContent = e.message; });
+}
+
+function doLogout() { auth.signOut(); }
+
+auth.onAuthStateChanged(async user => {
+  if (user) {
+    CU = user;
+    const snap = await db.collection('users').doc(user.uid).get();
+    if (snap.exists) {
+      CUD = snap.data();
+      isAdmin = CUD.isAdmin===true || CUD.email===ADMIN_EMAIL;
+    } else {
+      isAdmin = user.email === ADMIN_EMAIL;
+      CUD = isAdmin
+        ? { firstName:'Mohamed Hedi', lastName:'Bouhoula', role:'Store Manager', isAdmin:true }
+        : { firstName: user.email.split('@')[0], lastName:'', role:'Employee', isAdmin:false };
+      if (isAdmin) await db.collection('users').doc(user.uid).set({ ...CUD, email:user.email, createdAt:firebase.firestore.FieldValue.serverTimestamp() });
+    }
+    await loadAll();
+    showApp();
+  } else {
+    CU=null; CUD=null; isAdmin=false;
+    document.getElementById('app').classList.remove('active');
+    document.getElementById('login-page').classList.add('active');
+  }
+});
+
+// ── APP SHELL ─────────────────────────────────────
+function showApp() {
+  document.getElementById('login-page').classList.remove('active');
+  document.getElementById('app').classList.add('active');
+  const name = CUD ? `${CUD.firstName} ${CUD.lastName}`.trim() : CU.email;
+  document.getElementById('un').textContent = name;
+  document.getElementById('ua').textContent = ini(name);
+  const rb = document.getElementById('ur');
+  rb.textContent = isAdmin ? 'Store Manager' : (CUD?.role||'Employee');
+  rb.className = 'urole ' + (isAdmin?'urole-admin':'urole-emp');
+  document.getElementById('tdate').textContent = new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  buildNav();
+  goTo(isAdmin?'dashboard':'emp-dashboard');
+}
+
+function buildNav() {
+  const nav = document.getElementById('snav'); nav.innerHTML='';
+  const sections = isAdmin ? [
+    {s:'Overview',items:[{id:'dashboard',i:'📊',l:'Dashboard'}]},
+    {s:'Staff',items:[{id:'employees',i:'👥',l:'Employees'},{id:'schedule',i:'📅',l:'Schedule'}]},
+    {s:'Operations',items:[{id:'products',i:'📦',l:'Expiry Tracker'},{id:'orders',i:'🛒',l:'Order Planning'}]},
+    {s:'Communication',items:[{id:'messages',i:'✉️',l:'Messages'}]}
+  ] : [
+    {s:'My Work',items:[{id:'emp-dashboard',i:'🏠',l:'My Dashboard'},{id:'emp-avail',i:'📅',l:'My Availability'}]},
+    {s:'Communication',items:[{id:'emp-msg',i:'✉️',l:'Message Manager'}]}
+  ];
+  sections.forEach(sec => {
+    nav.innerHTML += `<div class="nav-section-label">${sec.s}</div>`;
+    sec.items.forEach(it => {
+      const b = document.createElement('button');
+      b.className='nav-item'; b.id='nav-'+it.id;
+      b.innerHTML=`<span class="icon">${it.i}</span>${it.l}`;
+      b.onclick=()=>goTo(it.id);
+      nav.appendChild(b);
+    });
+  });
+}
+
+function goTo(pid) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  const p=document.getElementById('page-'+pid); if(p) p.classList.add('active');
+  const b=document.getElementById('nav-'+pid); if(b) b.classList.add('active');
+  document.getElementById('ptitle').textContent = {dashboard:'Dashboard',employees:'Employees',schedule:'Weekly Schedule',products:'Expiry Tracker',orders:'Order Planning',messages:'Messages','emp-dashboard':'My Dashboard','emp-avail':'My Availability','emp-msg':'Messages'}[pid]||'KFC';
+  if(pid==='schedule') renderSched();
+  if(pid==='employees') renderEmps();
+  if(pid==='products') renderProds();
+  if(pid==='messages') renderMsgs();
+  if(pid==='orders') renderOrds();
+  if(pid==='emp-avail') renderAvail();
+  if(pid==='emp-dashboard') renderMySched();
+  if(pid==='emp-msg') renderMyMsgs();
+}
+
+// ── DATA LOAD ─────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadEmps(), loadSched(), loadProds(), loadMsgs()]);
+}
+
+async function loadEmps() {
+  const snap = await db.collection('kfc_employees').get();
+  employees = snap.docs.map(d=>({id:d.id,...d.data()}));
+  if (!employees.length) await seedEmps();
+}
+
+async function seedEmps() {
+  const seed=[
+    {lastName:'Adedunye',firstName:'Damilola Priscilla',employeeId:'60014143',site:'',role:'Team Member',rate:17.60},
+    {lastName:'Aghwach',firstName:'Adam',employeeId:'60014179',site:'1408',role:'Cook',rate:17.60},
+    {lastName:'Appidi',firstName:'Nandakishore',employeeId:'60015525',site:'',role:'Team Member',rate:17.60},
+    {lastName:'Beathimantakath',firstName:'Afeefurahman',employeeId:'60009331',site:'1406',role:'Shift Manager',rate:18.60},
+    {lastName:'Belarbi',firstName:'Anes Abdelmalek',employeeId:'60017072',site:'',role:'Cook',rate:17.60},
+    {lastName:'Bennis',firstName:'Marwa',employeeId:'60014150',site:'',role:'Team Member',rate:17.60},
+    {lastName:'Bouhoula',firstName:'Mohamed Hedi',employeeId:'60013386',site:'',role:'Assistant General Manager',rate:19.76},
+    {lastName:'Figueroa Padron',firstName:'Jorge',employeeId:'1102240',site:'',role:'Cook',rate:17.60},
+    {lastName:'Gilotra',firstName:'Arjun',employeeId:'60011381',site:'',role:'Shift Manager',rate:18.60},
+    {lastName:'Hashim',firstName:'Agil',employeeId:'1411116',site:'1420',role:'Team Member',rate:17.60},
+    {lastName:'Johny',firstName:'Albin',employeeId:'60015363',site:'1407',role:'Team Member',rate:17.60},
+    {lastName:'Khandelwal',firstName:'Sunny',employeeId:'60016591',site:'',role:'Cook',rate:17.60},
+    {lastName:'Legault-Agil',firstName:'Alyza',employeeId:'60016834',site:'',role:'Team Member',rate:16.60},
+    {lastName:'Saaji',firstName:'Brinto',employeeId:'60015628',site:'',role:'Team Member',rate:17.70},
+    {lastName:'Shaheen',firstName:'Ghazala',employeeId:'545660',site:'',role:'Shift Manager',rate:18.60},
+    {lastName:'Singh',firstName:'Amardeep',employeeId:'60012946',site:'1420',role:'Team Member',rate:17.20},
+    {lastName:'Singh',firstName:'Harshdeep',employeeId:'60015796',site:'1421',role:'Cook',rate:17.60},
+    {lastName:'Singh',firstName:'Jasmeet',employeeId:'60007859',site:'1408',role:'Shift Manager',rate:18.60},
+    {lastName:'Tiwari',firstName:'Balveer',employeeId:'60011402',site:'1420',role:'Shift Manager',rate:18.60}
+  ];
+  for (const e of seed) await db.collection('kfc_employees').add({...e,hasAccount:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  const s = await db.collection('kfc_employees').get();
+  employees = s.docs.map(d=>({id:d.id,...d.data()}));
+  toast('Staff roster loaded from PDF records.','info');
+}
+
+async function loadSched() {
+  const snap = await db.collection('kfc_schedule').get();
+  schedData={};
+  snap.docs.forEach(d=>{ const dt=d.data(); if(!schedData[dt.date]) schedData[dt.date]=[]; schedData[dt.date].push({id:d.id,...dt}); });
+}
+
+async function loadProds() {
+  const snap = await db.collection('kfc_products').get();
+  products = snap.docs.map(d=>({id:d.id,...d.data()}));
+}
+
+async function loadMsgs() {
+  try {
+    const snap = await db.collection('kfc_messages').orderBy('createdAt','desc').get();
+    messages = snap.docs.map(d=>({id:d.id,...d.data()}));
+  } catch { messages=[]; }
+}
+
+// ── DASHBOARD ─────────────────────────────────────
+function renderDash() {
+  document.getElementById('s-emp').textContent = employees.length;
+  let sh=0; getWeekDays().forEach(d=>sh+=(schedData[fd(d)]||[]).length);
+  document.getElementById('s-shifts').textContent=sh;
+  document.getElementById('s-exp').textContent=products.filter(p=>dl(p.expiry)<=3&&dl(p.expiry)>=0).length;
+  document.getElementById('s-msg').textContent=messages.filter(m=>!m.read).length;
+  const crit=products.filter(p=>dl(p.expiry)<=3);
+  document.getElementById('dash-alerts').innerHTML=crit.length?crit.map(p=>`<div class="alert-b"><span class="edot e-${exSt(dl(p.expiry))}"></span><strong>${p.name}</strong>: ${dl(p.expiry)<0?'⛔ EXPIRED':`⚠️ ${dl(p.expiry)} day(s) left`} (${p.category})</div>`).join('')
+    :`<div class="empty"><div class="ei">✅</div><p>No urgent alerts</p></div>`;
+  const tod=schedData[fd(new Date())]||[];
+  document.getElementById('dash-today').innerHTML=tod.length?`<table style="width:100%;font-size:13px"><thead><tr><th>Employee</th><th>Role</th><th>Hours</th></tr></thead><tbody>${tod.map(s=>`<tr><td>${s.empName||'—'}</td><td>${s.role}</td><td>${s.start}–${s.end}</td></tr>`).join('')}</tbody></table>`
+    :`<p style="color:var(--light);font-size:13px">No shifts scheduled for today.</p>`;
+}
+
+// ── EMPLOYEES ─────────────────────────────────────
+function renderEmps() {
+  const search=(document.getElementById('es').value||'').toLowerCase();
+  const fRole=document.getElementById('ef').value;
+  const filtered=employees.filter(e=>`${e.firstName} ${e.lastName}`.toLowerCase().includes(search)&&(!fRole||e.role===fRole));
+  const rc={'Shift Manager':'b-red','Cook':'b-gold','Team Member':'b-blue','Assistant General Manager':'b-green'};
+  document.getElementById('emp-tbody').innerHTML=filtered.length?filtered.map(e=>`
+    <tr>
+      <td><strong>${e.lastName}, ${e.firstName}</strong></td>
+      <td style="font-family:'Barlow Condensed',sans-serif;color:var(--light)">${e.employeeId||'—'}</td>
+      <td>${e.site||'—'}</td>
+      <td><span class="badge ${rc[e.role]||'b-blue'}">${e.role}</span></td>
+      <td>$${parseFloat(e.rate||0).toFixed(2)}</td>
+      <td>${e.hasAccount
+        ? `<span class="badge b-green">✅ Active</span>${e.accountEmail?`<br><span style="font-size:11px;color:var(--light)">${e.accountEmail}</span>`:''}`
+        : `<button class="btn btn-w btn-sm" onclick="openCre('${e.id}')">🔑 Create Account</button>`
+      }</td>
+      <td><div class="ac">
+        <button class="btn btn-g btn-sm" onclick="openEdit('${e.id}')">✏️</button>
+        <button class="btn btn-d btn-sm" onclick="delEmp('${e.id}')">🗑️</button>
+      </div></td>
+    </tr>`).join('')
+    :`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--mid)">No employees found</td></tr>`;
+}
+
+// ── CREATE ACCOUNT ────────────────────────────────
+function openCre(eid) {
+  const e=employees.find(x=>x.id===eid); if(!e) return;
+  document.getElementById('cre-eid').value=eid;
+  document.getElementById('cre-info').innerHTML=`👤 <strong>${e.firstName} ${e.lastName}</strong> · ${e.role} · ID: ${e.employeeId||'—'}`;
+  document.getElementById('cre-email').value=`${e.firstName.toLowerCase().replace(/\s+/g,'.')}.${e.lastName.toLowerCase().replace(/[^a-z]/g,'')}@kfc1416.com`;
+  document.getElementById('cre-pass').value='KFC1416!';
+  document.getElementById('cre-err').textContent='';
+  openM('cre-modal');
+}
+
+async function createAccForEmp() {
+  const eid=document.getElementById('cre-eid').value;
+  const email=document.getElementById('cre-email').value.trim();
+  const pass=document.getElementById('cre-pass').value;
+  const errEl=document.getElementById('cre-err'); errEl.textContent='';
+  if (!email||!pass) { errEl.textContent='Email and password are required.'; return; }
+  if (pass.length<6) { errEl.textContent='Password must be at least 6 characters.'; return; }
+  const e=employees.find(x=>x.id===eid); if(!e) return;
+  // Use secondary app to avoid signing out admin
+  let secApp;
+  try { secApp=firebase.app('sec'); } catch { secApp=firebase.initializeApp(firebaseConfig,'sec'); }
+  const secAuth=secApp.auth();
+  try {
+    const cred=await secAuth.createUserWithEmailAndPassword(email,pass);
+    await db.collection('users').doc(cred.user.uid).set({
+      firstName:e.firstName, lastName:e.lastName, email, employeeId:e.employeeId||'',
+      role:e.role, isAdmin:false, createdAt:firebase.firestore.FieldValue.serverTimestamp()
+    });
+    await db.collection('kfc_employees').doc(eid).update({hasAccount:true,accountEmail:email});
+    const idx=employees.findIndex(x=>x.id===eid);
+    if(idx>-1){employees[idx].hasAccount=true; employees[idx].accountEmail=email;}
+    await secAuth.signOut();
+    closeM('cre-modal');
+    renderEmps();
+    toast(`✅ Account created for ${e.firstName} ${e.lastName}  —  ${email}`,'success');
+  } catch(err) {
+    errEl.textContent={'auth/email-already-in-use':'This email is already registered.','auth/invalid-email':'Invalid email.','auth/weak-password':'Password must be 6+ characters.'}[err.code]||err.message;
+  }
+}
+
+function openEdit(id) {
+  const e=employees.find(x=>x.id===id); if(!e) return;
+  document.getElementById('ee-id').value=id;
+  document.getElementById('ee-first').value=e.firstName||'';
+  document.getElementById('ee-last').value=e.lastName||'';
+  document.getElementById('ee-eid').value=e.employeeId||'';
+  document.getElementById('ee-site').value=e.site||'';
+  document.getElementById('ee-role').value=e.role||'Team Member';
+  document.getElementById('ee-rate').value=e.rate||17.60;
+  openM('edit-emp-modal');
+}
+
+async function saveEditEmp() {
+  const id=document.getElementById('ee-id').value;
+  const upd={firstName:document.getElementById('ee-first').value.trim(),lastName:document.getElementById('ee-last').value.trim(),employeeId:document.getElementById('ee-eid').value.trim(),site:document.getElementById('ee-site').value.trim(),role:document.getElementById('ee-role').value,rate:parseFloat(document.getElementById('ee-rate').value)};
+  await db.collection('kfc_employees').doc(id).update(upd);
+  const i=employees.findIndex(x=>x.id===id); if(i>-1) employees[i]={...employees[i],...upd};
+  closeM('edit-emp-modal'); renderEmps(); toast('Employee updated.','success');
+}
+
+async function delEmp(id) {
+  if(!confirm('Remove this employee?')) return;
+  await db.collection('kfc_employees').doc(id).delete();
+  employees=employees.filter(x=>x.id!==id); renderEmps(); toast('Removed.','success');
+}
+
+async function addEmp() {
+  const d={firstName:document.getElementById('ae-first').value.trim(),lastName:document.getElementById('ae-last').value.trim(),employeeId:document.getElementById('ae-eid').value.trim(),site:document.getElementById('ae-site').value.trim(),role:document.getElementById('ae-role').value,rate:parseFloat(document.getElementById('ae-rate').value),hasAccount:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+  if(!d.firstName||!d.lastName){toast('Name required.','error');return;}
+  const ref=await db.collection('kfc_employees').add(d);
+  employees.push({id:ref.id,...d}); closeM('add-emp-modal'); renderEmps(); toast('Employee added.','success');
+}
+
+// ── SCHEDULE ──────────────────────────────────────
+function renderSched() {
+  const days=getWeekDays(), DN=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  document.getElementById('wklabel').textContent=days[0].toLocaleDateString('en-CA',{month:'short',day:'numeric'})+' – '+days[6].toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'});
+  const g=document.getElementById('wgrid'); g.innerHTML='';
+  const tod=fd(new Date());
+  days.forEach((d,i)=>{
+    const ds=fd(d), sh=schedData[ds]||[], isT=ds===tod;
+    const col=document.createElement('div'); col.className='day-col';
+    if(isT) col.style.borderTop='2px solid var(--red)';
+    col.innerHTML=`<div class="day-header"><div class="day-name" style="color:${isT?'var(--red)':'var(--white)'}">${DN[i]}</div><div style="font-size:11px;color:var(--light)">${d.getDate()}</div></div>
+    ${sh.length?sh.map(s=>`<div class="shift-slot"><div class="shift-time">${s.start}–${s.end}</div><div class="shift-emp">${s.empName||'—'}</div><div style="display:flex;justify-content:space-between;align-items:center"><div class="shift-role">${s.role}</div><button style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:10px" onclick="delShift('${s.id}','${ds}')">✕</button></div></div>`).join(''):`<div style="padding:8px;text-align:center;font-size:10px;color:var(--mid)">No shifts</div>`}
+    <button class="btn-add-shift" onclick="openAddShift('${ds}','${DN[i]}')">+ Add Shift</button>`;
+    g.appendChild(col);
+  });
+  // Validate
+  const issues=[];
+  days.forEach(d=>{ const sh=schedData[fd(d)]||[]; if(sh.length){const dn=d.toLocaleDateString('en-CA',{weekday:'short'}); if(!sh.find(s=>s.role==='Shift Manager')) issues.push(`${dn}: No Manager`); if(!sh.find(s=>s.role==='Cook')) issues.push(`${dn}: No Cook`); }});
+  document.getElementById('sched-val').innerHTML=issues.length?`<div class="alert-b">⚠️ <div>${issues.join(' &nbsp;|&nbsp; ')}</div></div>`:'';
+}
+
+function prevWeek(){weekOff--;renderSched();}
+function nextWeek(){weekOff++;renderSched();}
+
+function openAddShift(ds,dn) {
+  document.getElementById('ast-date').value=ds;
+  document.getElementById('ast-title').textContent=`➕ Shift — ${dn} ${ds}`;
+  document.getElementById('ast-emp').innerHTML=employees.map(e=>`<option value="${e.id}">${e.lastName}, ${e.firstName}</option>`).join('');
+  openM('add-shift-modal');
+}
+
+async function saveShift() {
+  const ds=document.getElementById('ast-date').value, eid=document.getElementById('ast-emp').value;
+  const emp=employees.find(x=>x.id===eid);
+  const data={date:ds,empId:eid,empName:emp?`${emp.firstName} ${emp.lastName}`:'?',role:document.getElementById('ast-role').value,start:document.getElementById('ast-start').value,end:document.getElementById('ast-end').value,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+  const ref=await db.collection('kfc_schedule').add(data);
+  if(!schedData[ds]) schedData[ds]=[];
+  schedData[ds].push({id:ref.id,...data});
+  closeM('add-shift-modal'); renderSched(); toast('Shift added.','success');
+}
+
+async function delShift(sid,ds) {
+  await db.collection('kfc_schedule').doc(sid).delete();
+  if(schedData[ds]) schedData[ds]=schedData[ds].filter(s=>s.id!==sid);
+  renderSched(); toast('Shift removed.','success');
+}
+
+async function autoSchedule() {
+  const days=getWeekDays();
+  const mgrs=employees.filter(e=>e.role==='Shift Manager');
+  const cooks=employees.filter(e=>e.role==='Cook'||e.role.includes('Food'));
+  const tms=employees.filter(e=>e.role==='Team Member');
+  if(!mgrs.length||!cooks.length){toast('Need Shift Manager + Cook.','error');return;}
+  let added=0;
+  for(const d of days){
+    const ds=fd(d);
+    if((schedData[ds]||[]).length) continue;
+    const m=[...mgrs].sort(()=>Math.random()-.5), c=[...cooks].sort(()=>Math.random()-.5), t=[...tms].sort(()=>Math.random()-.5);
+    const busy=[2,4,5,6].includes(d.getDay());
+    const shifts=[
+      {empId:m[0].id,empName:`${m[0].firstName} ${m[0].lastName}`,role:'Shift Manager',start:'09:30',end:'17:00'},
+      {empId:c[0].id,empName:`${c[0].firstName} ${c[0].lastName}`,role:'Cook',start:'09:30',end:'17:00'},
+      ...(t[0]?[{empId:t[0].id,empName:`${t[0].firstName} ${t[0].lastName}`,role:'Team Member',start:'10:00',end:'18:00'}]:[]),
+      {empId:(m[1]||m[0]).id,empName:`${(m[1]||m[0]).firstName} ${(m[1]||m[0]).lastName}`,role:'Shift Manager',start:'17:00',end:'23:30'},
+      {empId:(c[1]||c[0]).id,empName:`${(c[1]||c[0]).firstName} ${(c[1]||c[0]).lastName}`,role:'Cook',start:'17:00',end:'23:30'},
+      ...(t[1]?[{empId:t[1].id,empName:`${t[1].firstName} ${t[1].lastName}`,role:'Team Member',start:'17:00',end:'23:30'}]:[]),
+      ...(busy&&t[2]?[{empId:t[2].id,empName:`${t[2].firstName} ${t[2].lastName}`,role:'Team Member',start:'12:00',end:'20:00'}]:[])
+    ];
+    schedData[ds]=[];
+    for(const s of shifts){
+      const data={date:ds,...s,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+      const ref=await db.collection('kfc_schedule').add(data);
+      schedData[ds].push({id:ref.id,...data}); added++;
+    }
+  }
+  renderSched(); toast(`Done — ${added} shifts added.`,'success');
+}
+
+// ── PRODUCTS ──────────────────────────────────────
+function renderProds() {
+  const s=(document.getElementById('ps').value||'').toLowerCase();
+  const f=products.filter(p=>(p.name||'').toLowerCase().includes(s)).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));
+  document.getElementById('prod-alerts').innerHTML=products.filter(p=>dl(p.expiry)<=3).map(p=>`<div class="alert-b"><span class="edot e-${exSt(dl(p.expiry))}"></span><strong>${p.name}</strong>: ${dl(p.expiry)<0?'⛔ EXPIRED':`⚠️ ${dl(p.expiry)}d left`}</div>`).join('');
+  document.getElementById('prod-tbody').innerHTML=f.length?f.map(p=>{
+    const d=dl(p.expiry),st=exSt(d),col=st==='red'?'var(--red)':st==='orange'?'var(--orange)':'var(--green)';
+    return `<tr><td><span class="edot e-${st}"></span></td><td><strong>${p.name}</strong></td><td><span class="badge b-blue">${p.category||'—'}</span></td><td>${p.qty||1}</td><td>${p.expiry}</td><td style="color:${col};font-weight:600">${d<0?'EXPIRED':d+'d'}</td><td><button class="btn btn-d btn-sm" onclick="delProd('${p.id}')">🗑️</button></td></tr>`;
+  }).join(''):`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--mid)">No products. Click ➕ Add Product.</td></tr>`;
+}
+
+async function addProduct() {
+  const data={name:document.getElementById('ap-name').value.trim(),expiry:document.getElementById('ap-exp').value,qty:parseInt(document.getElementById('ap-qty').value)||1,category:document.getElementById('ap-cat').value,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
+  if(!data.name||!data.expiry){toast('Name and expiry required.','error');return;}
+  const ref=await db.collection('kfc_products').add(data);
+  products.push({id:ref.id,...data}); closeM('add-prod-modal'); renderProds(); renderDash(); toast('Product added.','success');
+}
+
+async function delProd(id) {
+  if(!confirm('Remove product?')) return;
+  await db.collection('kfc_products').doc(id).delete();
+  products=products.filter(x=>x.id!==id); renderProds(); toast('Removed.','success');
+}
+
+// ── ORDERS ────────────────────────────────────────
+const ORDS=[
+  {n:'Whole Chicken',u:'case',b:10},{n:'Chicken Breast',u:'case',b:8},{n:'Chicken Wings',u:'case',b:6},
+  {n:'Chicken Tenders',u:'case',b:5},{n:'Coleslaw Mix',u:'bag',b:4},{n:'Frying Oil',u:'jug',b:3},
+  {n:'Batter Mix',u:'bag',b:4},{n:'Sandwich Buns',u:'pack',b:6},{n:'Poutine Fries',u:'case',b:4},
+  {n:'Gravy Mix',u:'bag',b:3},{n:'Drink Cups',u:'sleeve',b:5},{n:'Napkins',u:'pack',b:4}
+];
+
+function renderOrds() {
+  const dow=new Date().getDay();
+  document.getElementById('ord-info').innerHTML=`<div class="alert-b">📅 ${dow===2?'Today is Tuesday — covers Wed–Fri':dow===5?'Today is Friday — covers Sat–Tue':'Order days: Tuesday & Friday'}</div>`;
+  if(!Object.keys(ordQty).length) ORDS.forEach(o=>ordQty[o.n]=o.b);
+  document.getElementById('ord-list').innerHTML=ORDS.map(o=>`
+    <div class="order-item">
+      <div><div style="font-weight:500;color:var(--lighter)">${o.n}</div><div style="font-size:11px;color:var(--light)">${o.u}</div></div>
+      <div class="oqty">
+        <button class="qbtn" onclick="adjQ('${o.n}',-1)">−</button>
+        <div style="min-width:32px;text-align:center;font-weight:600" id="oq-${o.n.replace(/\W/g,'-')}">${ordQty[o.n]}</div>
+        <button class="qbtn" onclick="adjQ('${o.n}',1)">+</button>
+      </div>
+    </div>`).join('');
+  loadPrevOrds();
+}
+
+function adjQ(n,d) { ordQty[n]=Math.max(0,(ordQty[n]||0)+d); const el=document.getElementById('oq-'+n.replace(/\W/g,'-')); if(el) el.textContent=ordQty[n]; }
+function genOrder() { ORDS.forEach(o=>{ ordQty[o.n]=o.b; const el=document.getElementById('oq-'+o.n.replace(/\W/g,'-')); if(el) el.textContent=o.b; }); toast('Quantities suggested.','success'); }
+async function saveOrder() {
+  await db.collection('kfc_orders').add({date:fd(new Date()),items:{...ordQty},createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  toast('Order saved!','success'); loadPrevOrds();
+}
+async function loadPrevOrds() {
+  const el=document.getElementById('prev-ords');
+  try {
+    const snap=await db.collection('kfc_orders').orderBy('createdAt','desc').limit(5).get();
+    el.innerHTML=snap.empty?'<p style="color:var(--light);font-size:13px">No previous orders.</p>':snap.docs.map(d=>{const dt=d.data();return`<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)"><div style="font-size:12px;color:var(--gold);margin-bottom:4px">📅 ${dt.date}</div><div style="font-size:13px;color:var(--lighter)">${Object.entries(dt.items||{}).map(([k,v])=>`${k}: <strong>${v}</strong>`).join(' · ')}</div></div>`;}).join('');
+  } catch { el.innerHTML='<p style="color:var(--light);font-size:13px">No previous orders.</p>'; }
+}
+
+// ── MESSAGES ──────────────────────────────────────
+function renderMsgs() {
+  document.getElementById('msgs-list').innerHTML=messages.length?messages.map(m=>`
+    <div class="msg-item ${m.read?'':'unread'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div><strong style="color:var(--white)">${m.fromName||'?'}</strong> <span style="font-size:11px;color:var(--light)">${m.fromRole||''}</span></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'}</span>
+          ${!m.read?`<button class="btn btn-g btn-sm" onclick="markRead('${m.id}')">Mark Read</button>`:`<span style="font-size:11px;color:var(--green)">✅</span>`}
+        </div>
+      </div>
+      <div style="font-size:13px;color:var(--lighter)">${m.message}</div>
+    </div>`).join(''):`<div class="empty"><div class="ei">📭</div><p>No messages yet.</p></div>`;
+}
+
+async function markRead(id) {
+  await db.collection('kfc_messages').doc(id).update({read:true});
+  const m=messages.find(x=>x.id===id); if(m) m.read=true;
+  renderMsgs(); renderDash();
+}
+
+// ── MY SCHEDULE ───────────────────────────────────
+function renderMySched() {
+  const days=getWeekDays(), fn=CUD?.firstName||'';
+  let myS=[];
+  days.forEach(d=>{ const ds=fd(d); (schedData[ds]||[]).forEach(s=>{ if(s.empId===CU.uid||(fn&&s.empName?.includes(fn))) myS.push({...s,ds,label:d.toLocaleDateString('en-CA',{weekday:'long',month:'short',day:'numeric'})}); }); });
+  let hrs=0; myS.forEach(s=>{ const [sh,sm]=s.start.split(':').map(Number),[eh,em]=s.end.split(':').map(Number); hrs+=(eh*60+em-sh*60-sm)/60; });
+  document.getElementById('my-sc').textContent=myS.length;
+  document.getElementById('my-hr').textContent=hrs.toFixed(1)+'h';
+  document.getElementById('my-sched').innerHTML=myS.length?`<table style="width:100%;font-size:14px"><thead><tr><th>Day</th><th>Time</th><th>Role</th></tr></thead><tbody>${myS.map(s=>`<tr><td>${s.label}</td><td>${s.start}–${s.end}</td><td><span class="badge b-red">${s.role}</span></td></tr>`).join('')}</tbody></table>`
+    :`<div class="empty"><div class="ei">📅</div><p>No shifts this week.</p></div>`;
+}
+
+// ── AVAILABILITY ──────────────────────────────────
+const WD=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+function renderAvail() {
+  document.getElementById('avail-g').innerHTML=WD.map((day,i)=>`
+    <div class="avail-day" id="ad-${i}"><div class="dn">${day.slice(0,3)}</div>
+    <label class="avail-check"><input type="checkbox" id="ac-${i}" onchange="togAv(${i})"> Available</label>
+    <div class="avail-times" id="at-${i}" style="display:none"><input type="time" id="af-${i}" value="09:00"><input type="time" id="ato-${i}" value="17:00"></div>
     </div>`).join('');
 }
 
-function getBadgeClass(role){
-  if(role==='Shift Manager'||role==='Shift Manager in Training') return 'badge-sm';
-  if(role==='AGM') return 'badge-agm';
-  if(role==='Team Member') return 'badge-tm';
-  return 'badge-cook';
+function togAv(i) {
+  const chk=document.getElementById('ac-'+i);
+  document.getElementById('at-'+i).style.display=chk.checked?'flex':'none';
+  document.getElementById('ad-'+i).classList.toggle('on',chk.checked);
 }
 
-// ── EMPLOYEES ──
-function renderEmployees(){
-  const rows=STATE.employees.map(e=>`
-    <tr>
-      <td><strong>${e.name}</strong></td>
-      <td><span class="badge ${getBadgeClass(e.role)}">${e.role}</span></td>
-      <td style="font-family:var(--font-mono);font-size:12px">${e.id}</td>
-      <td>$${Number(e.rate).toFixed(2)}/hr</td>
-      <td>${e.site||'1416'}</td>
-      <td>
-        <button class="btn btn-sm btn-secondary" onclick="editEmployee('${e.id}')">Edit</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteEmployee('${e.id}')">Delete</button>
-      </td>
-    </tr>`).join('');
-  return `
-  <div class="section-title">Employees</div>
-  <div class="section-sub">${STATE.employees.length} staff members · KFC 1416</div>
-  <div class="toolbar">
-    <input type="text" placeholder="Search by name or ID…" oninput="filterEmployees(this.value)" id="emp-search"/>
-    <button class="btn btn-primary" onclick="openAddEmployee()">+ Add Employee</button>
-  </div>
-  <div class="tbl-wrap">
-    <table id="emp-table">
-      <thead><tr><th>Name</th><th>Role</th><th>Employee ID</th><th>Rate</th><th>Home Site</th><th>Actions</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
+async function saveAvail() {
+  const avail={};
+  WD.forEach((day,i)=>{ const c=document.getElementById('ac-'+i); if(c?.checked) avail[day]={from:document.getElementById('af-'+i)?.value||'09:00',to:document.getElementById('ato-'+i)?.value||'17:00'}; });
+  await db.collection('kfc_availability').doc(CU.uid).set({uid:CU.uid,name:CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email,availability:avail,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  toast('Availability saved!','success');
 }
 
-function attachEmployeeHandlers(){
-  window.filterEmployees=function(v){
-    const rows=document.querySelectorAll('#emp-table tbody tr');
-    rows.forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(v.toLowerCase())?'':'none';});
-  };
-  window.openAddEmployee=function(){
-    openModal('Add Employee',`
-      <div class="form-row">
-        <div class="form-group"><label>Full Name</label><input id="ae-name" placeholder="Last, First"/></div>
-        <div class="form-group"><label>Employee ID</label><input id="ae-id" placeholder="60012345"/></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Role</label>
-          <select id="ae-role">
-            <option>Team Member</option><option>Shift Manager</option>
-            <option>Shift Manager in Training</option><option>AGM</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Hourly Rate</label><input id="ae-rate" type="number" step="0.01" placeholder="17.60"/></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Position (Jobcode)</label><input id="ae-pos" placeholder="Food Service Team Member"/></div>
-        <div class="form-group"><label>Home Site</label><input id="ae-site" placeholder="1416"/></div>
-      </div>
-      <button class="btn btn-primary" style="width:100%" onclick="saveEmployee()">Save Employee</button>
-    `);
-  };
-  window.saveEmployee=async function(){
-    const emp={
-      name:document.getElementById('ae-name').value.trim(),
-      id:document.getElementById('ae-id').value.trim(),
-      role:document.getElementById('ae-role').value,
-      rate:parseFloat(document.getElementById('ae-rate').value)||17.60,
-      pos:document.getElementById('ae-pos').value.trim(),
-      site:document.getElementById('ae-site').value.trim()||'1416',
-    };
-    if(!emp.name||!emp.id){toast('Name and ID required','warning');return;}
-    try{ await setDoc(doc(db,'employees_1416',emp.id),emp); }catch(e){}
-    STATE.employees.push(emp);
-    closeModal(); navigate('employees');
-    toast('Employee added','success');
-  };
-  window.editEmployee=function(eid){
-    const e=STATE.employees.find(x=>x.id===eid);if(!e)return;
-    openModal('Edit Employee',`
-      <div class="form-row">
-        <div class="form-group"><label>Full Name</label><input id="ee-name" value="${e.name}"/></div>
-        <div class="form-group"><label>Hourly Rate</label><input id="ee-rate" type="number" step="0.01" value="${e.rate}"/></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Role</label>
-          <select id="ee-role">
-            <option ${e.role==='Team Member'?'selected':''}>Team Member</option>
-            <option ${e.role==='Shift Manager'?'selected':''}>Shift Manager</option>
-            <option ${e.role==='Shift Manager in Training'?'selected':''}>Shift Manager in Training</option>
-            <option ${e.role==='AGM'?'selected':''}>AGM</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Home Site</label><input id="ee-site" value="${e.site||'1416'}"/></div>
-      </div>
-      <button class="btn btn-primary" style="width:100%" onclick="updateEmployee('${eid}')">Update</button>
-    `);
-  };
-  window.updateEmployee=async function(eid){
-    const idx=STATE.employees.findIndex(x=>x.id===eid);
-    if(idx===-1)return;
-    STATE.employees[idx].name=document.getElementById('ee-name').value;
-    STATE.employees[idx].rate=parseFloat(document.getElementById('ee-rate').value);
-    STATE.employees[idx].role=document.getElementById('ee-role').value;
-    STATE.employees[idx].site=document.getElementById('ee-site').value;
-    try{await updateDoc(doc(db,'employees_1416',eid),STATE.employees[idx]);}catch(e){}
-    closeModal(); navigate('employees'); toast('Updated','success');
-  };
-  window.deleteEmployee=async function(eid){
-    if(!confirm('Delete this employee?'))return;
-    try{await deleteDoc(doc(db,'employees_1416',eid));}catch(e){}
-    STATE.employees=STATE.employees.filter(x=>x.id!==eid);
-    navigate('employees'); toast('Deleted');
-  };
+// ── EMP MESSAGES ──────────────────────────────────
+async function sendEmpMsg() {
+  const txt=document.getElementById('emp-msg-txt').value.trim();
+  if(!txt){toast('Write a message first.','error');return;}
+  await db.collection('kfc_messages').add({fromUid:CU.uid,fromName:CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email,fromRole:CUD?.role||'Employee',message:txt,read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  document.getElementById('emp-msg-txt').value='';
+  toast('Message sent to manager.','success'); renderMyMsgs();
 }
 
-// ── SCHEDULE ──
-const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-const TYPE_A=['Monday','Wednesday','Sunday'];
-const TYPE_B=['Tuesday','Thursday','Friday','Saturday'];
-
-function getShiftStructure(day){
-  const isB=TYPE_B.includes(day);
-  return {
-    opening:[
-      {time:'9:30 AM – 5:00 PM',role:'Shift Manager',key:'op_sm'},
-      {time:'9:30 AM – 5:00 PM',role:'Cook',key:'op_cook'},
-      {time:'10:00 AM – 6:00 PM',role:'Team Member',key:'mid_tm'},
-    ],
-    evening:[
-      {time:'5:00 PM – 11:30 PM',role:'Shift Manager',key:'ev_sm'},
-      {time:'5:00 PM – 11:30 PM',role:'Cook',key:'ev_cook'},
-      {time:'5:00 PM – 11:30 PM',role:'Team Member',key:'ev_tm'},
-    ],
-    extra: isB?[
-      {time:'12:00 PM – 8:00 PM',role:'Team Member',key:'mid2_tm'},
-      {time:'5:00 PM – 10:30 PM',role:'Team Member',key:'close_tm'},
-    ]:[],
-  };
+async function renderMyMsgs() {
+  const el=document.getElementById('my-msgs');
+  try {
+    const snap=await db.collection('kfc_messages').where('fromUid','==',CU.uid).get();
+    const docs=snap.docs.sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0));
+    el.innerHTML=docs.length?docs.map(d=>{const m=d.data();return`<div class="msg-item"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong style="color:var(--white)">To: Manager</strong><span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'} ${m.read?'· ✅ Read':'· ⏳ Unread'}</span></div><div style="font-size:13px;color:var(--lighter)">${m.message}</div></div>`;}).join(''):`<div class="empty"><div class="ei">📤</div><p>No messages sent yet.</p></div>`;
+  } catch { el.innerHTML='<div class="empty"><div class="ei">📤</div><p>No messages sent yet.</p></div>'; }
 }
 
-function renderSchedule(){
-  const weekKey=fmtDate(STATE.currentWeek);
-  const days=STATE.schedules[weekKey]||{};
-  const cols=DAYS.map((day,i)=>{
-    const dt=new Date(STATE.currentWeek); dt.setDate(dt.getDate()+i);
-    const isB=TYPE_B.includes(day);
-    const struct=getShiftStructure(day);
-    const allSlots=[...struct.opening,...struct.evening,...struct.extra];
-    const assigned=days[day]||{};
-    const slots=allSlots.map(s=>{
-      const who=assigned[s.key];
-      if(who){
-        return `<div class="shift-slot ${s.role==='Shift Manager'?'sm':s.role==='Cook'?'cook':''}">
-          <div class="shift-time">${s.time}</div>
-          <div class="shift-name">${who}</div>
-          <div class="shift-role">${s.role}</div>
-        </div>`;
-      }
-      return `<div class="shift-slot empty"><div class="shift-time">${s.time}</div><div class="shift-name">Unassigned</div><div class="shift-role">${s.role}</div></div>`;
-    }).join('');
-    return `<div class="sched-day">
-      <div class="sched-day-head">
-        <span>${day.substring(0,3).toUpperCase()} ${dt.getDate()}</span>
-        <span class="day-type">Type ${isB?'B':'A'}</span>
-      </div>
-      ${slots}
-    </div>`;
-  }).join('');
-
-  return `
-  <div class="section-title">Schedule Builder</div>
-  <div class="section-sub">Week of ${STATE.currentWeek.toDateString()}</div>
-  <div class="toolbar">
-    <button class="btn btn-secondary" onclick="prevWeek()">← Prev</button>
-    <button class="btn btn-secondary" onclick="nextWeek()">Next →</button>
-    <button class="btn btn-primary" onclick="autoAssign()">⚡ Auto-Assign</button>
-    <button class="btn btn-secondary" onclick="saveSchedule()">💾 Save Schedule</button>
-    <button class="btn btn-secondary" onclick="validateSchedule()">✓ Validate</button>
-  </div>
-  <div class="sched-grid" id="sched-grid">${cols}</div>
-  <div id="sched-validation" style="margin-top:16px"></div>`;
-}
-
-function attachScheduleHandlers(){
-  window.prevWeek=function(){
-    STATE.currentWeek=new Date(STATE.currentWeek.getTime()-7*86400000);
-    navigate('schedule');
-  };
-  window.nextWeek=function(){
-    STATE.currentWeek=new Date(STATE.currentWeek.getTime()+7*86400000);
-    navigate('schedule');
-  };
-
-  window.autoAssign=function(){
-    const weekKey=fmtDate(STATE.currentWeek);
-    const avail=STATE.availability;
-    const sms=STATE.employees.filter(e=>e.role==='Shift Manager'||e.role==='Shift Manager in Training');
-    const tms=STATE.employees.filter(e=>e.role==='Team Member');
-    const schedule={};
-    const smUsed={}; const tmUsed={};
-
-    DAYS.forEach((day,i)=>{
-      const struct=getShiftStructure(day);
-      const allSlots=[...struct.opening,...struct.evening,...struct.extra];
-      const assigned={};
-      let smIdx=0; let tmIdx=0;
-
-      allSlots.forEach(s=>{
-        if(s.role==='Shift Manager'||s.role==='Cook'){
-          // pick next available SM
-          while(smIdx<sms.length && (smUsed[sms[smIdx]?.id]||0)>=5) smIdx++;
-          if(smIdx<sms.length){
-            assigned[s.key]=shortName(sms[smIdx].name);
-            smUsed[sms[smIdx].id]=(smUsed[sms[smIdx].id]||0)+1;
-            smIdx++;
-          }
-        } else {
-          while(tmIdx<tms.length && (tmUsed[tms[tmIdx]?.id]||0)>=5) tmIdx++;
-          if(tmIdx<tms.length){
-            assigned[s.key]=shortName(tms[tmIdx].name);
-            tmUsed[tms[tmIdx].id]=(tmUsed[tms[tmIdx].id]||0)+1;
-            tmIdx++;
-          }
-        }
-      });
-      schedule[day]=assigned;
-    });
-
-    STATE.schedules[weekKey]=schedule;
-    navigate('schedule');
-    toast('Auto-assigned! Review and save.','success');
-  };
-
-  window.saveSchedule=async function(){
-    const weekKey=fmtDate(STATE.currentWeek);
-    try{
-      await setDoc(doc(db,'schedules_1416',weekKey),{days:STATE.schedules[weekKey]||{},updated:serverTimestamp()});
-    }catch(e){}
-    toast('Schedule saved','success');
-  };
-
-  window.validateSchedule=function(){
-    const weekKey=fmtDate(STATE.currentWeek);
-    const days=STATE.schedules[weekKey]||{};
-    const issues=[];
-    DAYS.forEach(day=>{
-      const struct=getShiftStructure(day);
-      const all=[...struct.opening,...struct.evening,...struct.extra];
-      const assigned=days[day]||{};
-      const missing=all.filter(s=>!assigned[s.key]);
-      if(missing.length) issues.push(`<strong>${day}</strong>: ${missing.length} unassigned slot(s) (${missing.map(s=>s.role).join(', ')})`);
-    });
-    const el=document.getElementById('sched-validation');
-    if(issues.length){
-      el.innerHTML=`<div class="card" style="border-left:3px solid var(--red)">
-        <div class="card-title" style="color:var(--red)">⚠ Validation Issues</div>
-        <ul style="padding-left:18px;font-size:13px;line-height:1.8">${issues.map(i=>`<li>${i}</li>`).join('')}</ul>
-      </div>`;
-    } else {
-      el.innerHTML=`<div class="card" style="border-left:3px solid #2ea84b">
-        <div class="card-title" style="color:#2ea84b">✓ Schedule looks complete!</div>
-      </div>`;
-    }
-  };
-}
-
-// ── AVAILABILITY ──
-function renderAvailability(){
-  const avail=STATE.availability;
-  const empIds=Object.keys(avail);
-  if(empIds.length===0) return `
-    <div class="section-title">Availability</div>
-    <div class="section-sub">No submissions yet.</div>
-    <div class="card"><p style="color:var(--muted)">No employees have submitted availability yet.</p></div>`;
-
-  // Summary table with unlock button per person
-  const tableRows = empIds.map(uid=>{
-    const a = avail[uid];
-    const name = a?.name||a?.email||uid;
-    const isLocked = a?.locked===true;
-    const date = a?.updatedAt||'—';
-    const daysAvail = DAYS.filter(d=>a?.days?.[d]?.available).map(d=>d.substring(0,3)).join(', ')||'None';
-    return `<tr>
-      <td><strong>${name}</strong></td>
-      <td style="font-size:12px">${daysAvail}</td>
-      <td>${date}</td>
-      <td>${isLocked
-        ? `<span style="color:#2ea84b;font-size:12px;font-weight:600">\u2705 Submitted</span>`
-        : `<span style="color:var(--muted);font-size:12px">In progress</span>`
-      }</td>
-      <td>${isLocked
-        ? `<button class="btn btn-sm btn-secondary" onclick="unlockAvail('${uid}')">\uD83D\uDD13 Reopen</button>`
-        : `<button class="btn btn-sm btn-danger" onclick="clearAvail('${uid}')">Clear</button>`
-      }</td>
-    </tr>`;
-  }).join('');
-
-  // Day-by-day grid
-  const cols=DAYS.map(day=>{
-    const emps=empIds.filter(uid=>avail[uid]?.days?.[day]?.available);
-    return `<div class="avail-day">
-      <div class="avail-day-name">${day.substring(0,3).toUpperCase()}</div>
-      ${emps.length?emps.map(uid=>`<div class="avail-emp">${avail[uid]?.name?.split(',')[0]||uid}</div>`).join(''):'<div style="font-size:11px;color:var(--muted)">—</div>'}
-    </div>`;
-  }).join('');
-
-  return `
-  <div class="section-title">Availability</div>
-  <div class="section-sub">${empIds.length} submission(s) received</div>
-  <div class="card" style="margin-bottom:18px">
-    <div class="card-title">Submission Status</div>
-    <div class="tbl-wrap">
-      <table>
-        <thead><tr><th>Employee</th><th>Available Days</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-title">Day-by-Day Overview</div>
-    <div class="avail-grid">${cols}</div>
-  </div>`;
-}
-
-// Admin: unlock a staff member's availability so they can resubmit
-window.unlockAvail = async function(uid){
-  try{
-    await updateDoc(doc(db,'availability_1416',uid),{locked:false,submitted:false});
-    STATE.availability[uid].locked=false;
-    STATE.availability[uid].submitted=false;
-    navigate('availability');
-    toast('Availability reopened for '+STATE.availability[uid].name,'success');
-  }catch(e){
-    toast('Error: '+e.message,'warning');
-  }
-};
-
-window.clearAvail = async function(uid){
-  if(!confirm('Clear this submission?'))return;
-  try{await deleteDoc(doc(db,'availability_1416',uid));}catch(e){}
-  delete STATE.availability[uid];
-  navigate('availability');
-  toast('Cleared');
-};
-
-// ── EXPIRY ──
-function renderExpiry(){
-  const today=new Date(); today.setHours(0,0,0,0);
-  const rows=STATE.products.map(p=>{
-    const d=new Date(p.expiry); d.setHours(0,0,0,0);
-    const diff=Math.ceil((d-today)/86400000);
-    let cls='exp-green',dot='dot-green',label=`${diff}d left`;
-    if(diff<=0){cls='exp-red';dot='dot-red';label='EXPIRED';}
-    else if(diff<=3){cls='exp-orange';dot='dot-orange';label=`${diff}d — alert!`;}
-    return `<tr class="expiry-row">
-      <td><strong>${p.name}</strong></td>
-      <td style="font-family:var(--font-mono);font-size:12px">${p.expiry}</td>
-      <td class="${cls}"><span class="dot ${dot}"></span>${label}</td>
-      <td>
-        <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p._fid}')">Remove</button>
-      </td>
-    </tr>`;
-  }).join('');
-
-  return `
-  <div class="section-title">Expiry Tracker</div>
-  <div class="section-sub">Monitor product freshness</div>
-  <div class="toolbar">
-    <button class="btn btn-primary" onclick="openAddProduct()">+ Add Product</button>
-  </div>
-  <div class="tbl-wrap">
-    <table>
-      <thead><tr><th>Product</th><th>Expiry Date</th><th>Status</th><th>Action</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-  </div>`;
-}
-
-function attachExpiryHandlers(){
-  window.openAddProduct=function(){
-    openModal('Add Product',`
-      <div class="form-group" style="margin-bottom:12px"><label>Product Name</label><input id="ap-name" placeholder="e.g. Original Recipe Chicken"/></div>
-      <div class="form-group" style="margin-bottom:16px"><label>Expiry Date</label><input id="ap-exp" type="date"/></div>
-      <button class="btn btn-primary" style="width:100%" onclick="saveProduct()">Add Product</button>
-    `);
-  };
-  window.saveProduct=async function(){
-    const p={name:document.getElementById('ap-name').value.trim(),expiry:document.getElementById('ap-exp').value};
-    if(!p.name||!p.expiry){toast('Fill all fields','warning');return;}
-    try{const ref=await addDoc(collection(db,'products_1416'),p);p._fid=ref.id;}catch(e){p._fid='p'+Date.now();}
-    STATE.products.push(p);
-    closeModal();navigate('expiry');toast('Product added','success');
-  };
-  window.deleteProduct=async function(fid){
-    try{await deleteDoc(doc(db,'products_1416',fid));}catch(e){}
-    STATE.products=STATE.products.filter(p=>p._fid!==fid);
-    navigate('expiry');toast('Removed');
-  };
-}
-
-// ── MESSAGES ──
-function renderMessages(){
-  const msgs=STATE.messages;
-  const list=msgs.length?msgs.map(m=>`
-    <div class="msg-item">
-      <div class="msg-meta">From: ${m.from||'Unknown'} · ${m.ts?.toDate?.()?.toLocaleString?.()||m.ts||'—'}</div>
-      <div class="msg-body">${m.body||''}</div>
-    </div>`).join(''):`<p style="color:var(--muted);font-size:13px">No messages yet.</p>`;
-  return `
-  <div class="section-title">Messages</div>
-  <div class="section-sub">Confidential employee messages</div>
-  <div class="card">${list}</div>`;
-}
-function attachMessageHandlers(){}
-
-// ── ORDER PLANNER ──
-function renderOrder(){
-  const today=new Date();
-  const dow=today.getDay(); // 0=Sun,2=Tue,5=Fri
-  const nextOrder=dow<=2?'Tuesday':'Friday';
-  return `
-  <div class="section-title">Sysco Order Planner</div>
-  <div class="section-sub">Next order: <strong>${nextOrder}</strong></div>
-  <div class="card">
-    <div class="card-title">Order Planning Assistant</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
-      Upload your daily inventory report and recent sales data to generate a suggested order.
-      Tuesday orders cover Wed–Fri · Friday orders cover Sat–Tue.
-    </p>
-    <div class="form-group" style="margin-bottom:12px">
-      <label>Current Inventory Notes</label>
-      <textarea id="inv-notes" rows="4" style="padding:10px;border:1px solid var(--border);border-radius:9px;font-family:var(--font-body);font-size:13px;resize:vertical;width:100%;outline:none"
-        placeholder="e.g. Chicken: 3 cases low · Coleslaw: running out · Zinger: OK…"></textarea>
-    </div>
-    <div class="form-group" style="margin-bottom:16px">
-      <label>Last 3 Days Sales Notes</label>
-      <textarea id="sales-notes" rows="3" style="padding:10px;border:1px solid var(--border);border-radius:9px;font-family:var(--font-body);font-size:13px;resize:vertical;width:100%;outline:none"
-        placeholder="e.g. Wed 250 pieces, Thu 310 pieces, Fri 420 pieces…"></textarea>
-    </div>
-    <button class="btn btn-primary" onclick="generateOrder()">⚡ Generate Suggested Order</button>
-    <div id="order-result" style="margin-top:16px"></div>
-  </div>`;
-}
-// attach is inline
-document.addEventListener('click', e=>{
-  if(e.target.id==='generate-order-btn'||e.target.onclick?.toString?.().includes('generateOrder')) return;
+// ── BOOT ──────────────────────────────────────────
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const ls=document.getElementById('loading-screen');
+    ls.style.opacity='0';
+    setTimeout(()=>{
+      ls.style.display='none';
+      if(!CU) document.getElementById('login-page').classList.add('active');
+    },500);
+  }, 1500);
 });
-window.generateOrder=function(){
-  const inv=document.getElementById('inv-notes')?.value||'';
-  const sales=document.getElementById('sales-notes')?.value||'';
-  const result=document.getElementById('order-result');
-  if(!result)return;
-  // Simple rule-based suggestion
-  result.innerHTML=`<div class="card" style="border-left:3px solid var(--terra)">
-    <div class="card-title">📦 Suggested Order</div>
-    <div style="font-size:13px;line-height:2">
-      <div>🍗 Original Recipe Chicken — <strong>4 cases</strong> (high turnover)</div>
-      <div>🥗 Coleslaw Mix — <strong>3 bags</strong></div>
-      <div>🌶 Zinger Patties — <strong>2 cases</strong></div>
-      <div>🥣 Gravy Sauce — <strong>6 pouches</strong></div>
-      <div>🍿 Popcorn Chicken — <strong>2 cases</strong></div>
-      <div>🍞 Burger Buns — <strong>3 packs</strong></div>
-      <div>🧃 Beverage Syrup — <strong>2 cases</strong></div>
-    </div>
-    <p style="margin-top:12px;font-size:12px;color:var(--muted)">
-      ⚠ Adjust based on actual inventory count. ${inv?'Noted: '+inv.substring(0,60):''}
-    </p>
-  </div>`;
-};
-
-// ── MY SCHEDULE (Employee) ──
-function renderMySchedule(){
-  const weekKey=fmtDate(STATE.currentWeek);
-  const days=STATE.schedules[weekKey]||{};
-  const myName=shortName(STATE.user?.name||'');
-  const myShifts=[];
-  DAYS.forEach((day,i)=>{
-    const assigned=days[day]||{};
-    Object.entries(assigned).forEach(([key,who])=>{
-      if(who&&who.toLowerCase().includes(myName.toLowerCase())){
-        const struct=getShiftStructure(day);
-        const allSlots=[...struct.opening,...struct.evening,...struct.extra];
-        const slot=allSlots.find(s=>s.key===key);
-        if(slot) myShifts.push({day,time:slot.time,role:slot.role,dayIdx:i});
-      }
-    });
-  });
-
-  const shiftsHtml=myShifts.length?myShifts.map(s=>`
-    <div class="my-shift">
-      <div class="my-shift-day">${s.day.substring(0,3).toUpperCase()}</div>
-      <div class="my-shift-info">
-        <div style="font-weight:500">${s.day}</div>
-        <div class="my-shift-time">${s.time}</div>
-      </div>
-      <span class="badge ${getBadgeClass(s.role)}">${s.role}</span>
-    </div>`).join(''):`<p style="color:var(--muted);font-size:13px">No shifts assigned this week.</p>`;
-
-  return `
-  <div class="section-title">My Schedule</div>
-  <div class="section-sub">Week of ${STATE.currentWeek.toDateString()}</div>
-  <div class="toolbar">
-    <button class="btn btn-secondary" onclick="prevWeek()">← Prev Week</button>
-    <button class="btn btn-secondary" onclick="nextWeek()">Next Week →</button>
-  </div>
-  <div class="user-sched-card">${shiftsHtml}</div>`;
-}
-
-// ── MY AVAILABILITY ──
-function renderMyAvailability(){
-  const saved = STATE.myAvailData || {};
-  const isLocked = saved.locked === true;
-  const isSubmitted = saved.submitted === true;
-
-  // If locked (already submitted and admin has not reopened), show read-only view
-  if(isLocked){
-    const rows = DAYS.map(day=>{
-      const d = saved.days?.[day];
-      const avail = d?.available;
-      return `<div class="day-avail-row" style="opacity:0.8">
-        <label style="width:90px;font-weight:${avail?'600':'400'};color:${avail?'var(--charcoal)':'var(--muted)'}">
-          ${avail?'\u2705':'\u274c'} ${day.substring(0,3)}
-        </label>
-        ${avail?`<span style="font-family:var(--font-mono);font-size:12px">${d?.from||'--:--'} \u2014 ${d?.to||'--:--'}</span>`:'<span style="font-size:12px;color:var(--muted)">Not available</span>'}
-      </div>`;
-    }).join('');
-    return `
-    <div class="section-title">My Availability</div>
-    <div class="section-sub">Submitted \u2014 waiting for manager to review</div>
-    <div class="card" style="border-left:4px solid #2ea84b">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:10px 14px;background:rgba(46,168,75,0.08);border-radius:9px">
-        <span style="font-size:20px">\u2705</span>
-        <div>
-          <div style="font-weight:600;font-size:14px">Availability Submitted</div>
-          <div style="font-size:12px;color:var(--muted)">Submitted on ${saved.updatedAt||''}. Your manager will review it.</div>
-        </div>
-      </div>
-      ${rows}
-      <p style="margin-top:14px;font-size:12px;color:var(--muted);padding:10px;background:var(--warm);border-radius:8px">
-        \u{1F512} Your availability is locked. If you need to make changes, ask your manager to reopen it.
-      </p>
-    </div>`;
-  }
-
-  // Not yet submitted — show editable form
-  const rows=DAYS.map(day=>{
-    const d=saved?.days?.[day];
-    return `<div class="day-avail-row">
-      <label><input type="checkbox" id="av-${day}" ${d?.available?'checked':''}> ${day.substring(0,3)}</label>
-      <input type="time" id="avf-${day}" value="${d?.from||'09:00'}">
-      <span style="font-size:12px;color:var(--muted)">to</span>
-      <input type="time" id="avt-${day}" value="${d?.to||'17:00'}">
-    </div>`;
-  }).join('');
-
-  return `
-  <div class="section-title">My Availability</div>
-  <div class="section-sub">Fill in your availability then submit. You can only submit once.</div>
-  <div class="card">
-    ${rows}
-    <button class="btn btn-primary" style="margin-top:16px;width:100%" onclick="saveMyAvail()">
-      \u{1F4BE} Save & Submit Availability
-    </button>
-    <p style="margin-top:10px;font-size:12px;color:var(--muted)">
-      \u26a0\ufe0f Once submitted, you cannot edit again unless your manager reopens it.
-    </p>
-  </div>`;
-}
-
-function attachMyAvailHandlers(){
-  window.saveMyAvail=async function(){
-    const uid = STATE.firebaseUid;
-    if(!uid || uid==='demo_admin'){toast('Cannot save: not logged in with a real account','warning');return;}
-
-    const days={};
-    DAYS.forEach(day=>{
-      days[day]={
-        available:document.getElementById(`av-${day}`)?.checked||false,
-        from:document.getElementById(`avf-${day}`)?.value||'09:00',
-        to:document.getElementById(`avt-${day}`)?.value||'17:00',
-      };
-    });
-
-    const data={
-      name: STATE.user?.name||STATE.user?.email||'',
-      email: STATE.user?.email||'',
-      days,
-      submitted: true,
-      locked: true,
-      updatedAt: new Date().toLocaleDateString('en-CA'),
-    };
-
-    try{
-      await setDoc(doc(db,'availability_1416', uid), data);
-      STATE.myAvailData = data;
-      toast('Availability submitted!','success');
-      navigate('my-availability');
-    }catch(err){
-      console.error('Firestore write error:',err);
-      toast('Error saving: '+err.message,'warning');
-    }
-  };
-}
-
-// ── MY MESSAGE ──
-function renderMyMessage(){
-  return `
-  <div class="section-title">Message Manager</div>
-  <div class="section-sub">Send a confidential message to the store manager</div>
-  <div class="card">
-    <div class="form-group" style="margin-bottom:16px">
-      <label>Your Message (visible only to manager)</label>
-      <textarea id="msg-body" rows="5" style="padding:10px;border:1px solid var(--border);border-radius:9px;font-family:var(--font-body);font-size:13px;resize:vertical;width:100%;outline:none"
-        placeholder="Type your message here…"></textarea>
-    </div>
-    <button class="btn btn-primary" onclick="sendMsg()">Send Message</button>
-  </div>`;
-}
-function attachMyMsgHandlers(){
-  window.sendMsg=async function(){
-    const body=document.getElementById('msg-body')?.value?.trim();
-    if(!body){toast('Write a message first','warning');return;}
-    const m={from:STATE.user?.name||STATE.user?.email||'Employee',body,ts:new Date().toISOString()};
-    try{await addDoc(collection(db,'messages_1416'),m);}catch(e){}
-    STATE.messages.unshift(m);
-    document.getElementById('msg-body').value='';
-    toast('Message sent to manager','success');
-  };
-}
-
-// ── MODAL ──
-window.openModal=function(title,body){
-  document.getElementById('modal-title').textContent=title;
-  document.getElementById('modal-body').innerHTML=body;
-  document.getElementById('modal-backdrop').classList.add('open');
-};
-window.closeModal=function(){
-  document.getElementById('modal-backdrop').classList.remove('open');
-};
-
-// ── TOAST ──
-window.toast=function(msg,type=''){
-  const el=document.createE
+</script>
+</body>
+</html>
