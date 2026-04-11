@@ -853,10 +853,12 @@ async function createAccForEmp() {
   const secAuth=secApp.auth();
   try {
     const cred=await secAuth.createUserWithEmailAndPassword(email,pass);
-    await db.collection('users').doc(cred.user.uid).set({firstName:e.firstName,lastName:e.lastName,email,employeeId:e.employeeId||'',role:e.role,isAdmin:false,createdAt:FS.serverTimestamp()});
-    await db.collection('kfc_employees').doc(eid).update({hasAccount:true,accountEmail:email});
+    const newUid=cred.user.uid;
+    await db.collection('users').doc(newUid).set({firstName:e.firstName,lastName:e.lastName,email,employeeId:e.employeeId||'',role:e.role,isAdmin:false,createdAt:FS.serverTimestamp()});
+    // Store accountUid on employee doc so availability can be matched later
+    await db.collection('kfc_employees').doc(eid).update({hasAccount:true,accountEmail:email,accountUid:newUid});
     const idx=employees.findIndex(x=>x.id===eid);
-    if(idx>-1){employees[idx].hasAccount=true;employees[idx].accountEmail=email;}
+    if(idx>-1){employees[idx].hasAccount=true;employees[idx].accountEmail=email;employees[idx].accountUid=newUid;}
     await secAuth.signOut();
     closeM('cre-modal'); renderEmps();
     toast(`✅ Account created — ${email}`,'success');
@@ -1070,75 +1072,184 @@ async function deleteVacation(vid) {
 
 async function autoSchedule() {
   try {
-    const days=getWeekDays();
-    // Load approved availability from Firestore
-    let availMap={};
+    toast('Checking approved availability…', 'info');
+    const days = getWeekDays();
+
+    // ── STEP 1: Load ALL approved availability docs ─────────────────────────
+    // Build availByEmpId: kfc_employees doc ID → { Monday:{from,to}, … }
+    const availByEmpId  = {};
+    const matchSource   = {}; // for debug logging
+
     try {
-      const availSnap=await db.collection('kfc_availability').where('status','==','approved').get();
-      availSnap.docs.forEach(d=>{ const dt=d.data(); if(dt.uid) availMap[dt.uid]=dt.availability||{}; });
-      // Also load by name match for employees without UID linked
-      const allAvailSnap=await db.collection('kfc_availability').get();
-      allAvailSnap.docs.forEach(d=>{ const dt=d.data(); if(dt.status==='approved'&&dt.uid&&!availMap[dt.uid]) availMap[dt.uid]=dt.availability||{}; });
-    } catch(ae){ console.warn('Could not load availability:',ae); }
+      const snap = await db.collection('kfc_availability')
+                           .where('status', '==', 'approved').get();
 
-    // Helper: is employee available on a given day?
-    function empAvailOnDay(emp, dayName) {
-      // Check vacation first
-      const ds=fd(days.find(d=>d.toLocaleDateString('en-CA',{weekday:'long'})===dayName)||new Date());
-      if(isOnVacation(emp.id, ds)) return false;
-      // Check availability if we have approved data
-      const uid=emp.accountUid||emp.id;
-      if(availMap[uid]) {
-        return !!availMap[uid][dayName];
-      }
-      // No availability data = assume available (fallback)
-      return true;
+      snap.docs.forEach(doc => {
+        const av = doc.data();
+        if (!av.availability || !Object.keys(av.availability).length) return;
+
+        // Priority 1 — accountUid stored on kfc_employees doc (set when account created)
+        const byUid = employees.find(e => e.accountUid && e.accountUid === av.uid);
+        if (byUid) {
+          availByEmpId[byUid.id] = av.availability;
+          matchSource[byUid.id]  = `uid(${av.uid.slice(0,6)}…)`;
+          return;
+        }
+
+        // Priority 2 — accountEmail on kfc_employees matches av.email
+        if (av.email) {
+          const byEmail = employees.find(e =>
+            e.accountEmail && e.accountEmail.toLowerCase() === av.email.toLowerCase());
+          if (byEmail) {
+            availByEmpId[byEmail.id] = av.availability;
+            matchSource[byEmail.id]  = `email(${av.email})`;
+            return;
+          }
+        }
+
+        // Priority 3 — name stored in availability doc matches employee name
+        if (av.name) {
+          const needle = av.name.trim().toLowerCase();
+          const byName = employees.find(e => {
+            const fwd = `${e.firstName||''} ${e.lastName||''}`.trim().toLowerCase();
+            const rev = `${e.lastName||''}, ${e.firstName||''}`.trim().toLowerCase();
+            return fwd === needle || rev === needle ||
+                   fwd.includes(needle) || needle.includes(fwd.split(' ')[0]);
+          });
+          if (byName) {
+            availByEmpId[byName.id] = av.availability;
+            matchSource[byName.id]  = `name(${av.name})`;
+            return;
+          }
+        }
+        console.warn('[autoSchedule] Could not match availability doc → employee | uid:', av.uid, '| name:', av.name);
+      });
+    } catch (ae) {
+      console.warn('[autoSchedule] Availability load failed — scheduling without it:', ae.message);
     }
 
-    const WDN=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    let added=0;
-    for(let i=0;i<days.length;i++){
-      const d=days[i];
-      const ds=fd(d);
-      const dayName=WDN[i];
-      if((schedData[ds]||[]).length) continue; // skip days that already have shifts
+    const matchedCount = Object.keys(availByEmpId).length;
+    console.log(`[autoSchedule] ${matchedCount} employee(s) matched with approved availability:`, matchSource);
 
-      // Filter employees by availability & vacation for this day
-      const mgrs=employees.filter(e=>e.role==='Shift Manager'&&empAvailOnDay(e,dayName));
-      const cooks=employees.filter(e=>(e.role==='Cook'||e.role.includes('Food'))&&empAvailOnDay(e,dayName));
-      const tms=employees.filter(e=>e.role==='Team Member'&&empAvailOnDay(e,dayName));
+    // ── STEP 2: Availability check helpers ─────────────────────────────────
+    // Is employee available on this date at all?
+    function isAvailOnDate(emp, dateStr) {
+      if (isOnVacation(emp.id, dateStr)) return false;
+      if (!(emp.id in availByEmpId)) return true; // no submission → assume available
+      const dayName = new Date(dateStr + 'T12:00:00')
+        .toLocaleDateString('en-CA', { weekday: 'long' });
+      return !!availByEmpId[emp.id][dayName];
+    }
 
-      // Fallback: if filtered pools are empty, use all employees of that role (ignoring availability gaps)
-      const mgrsF=mgrs.length?mgrs:employees.filter(e=>e.role==='Shift Manager');
-      const cooksF=cooks.length?cooks:employees.filter(e=>e.role==='Cook'||e.role.includes('Food'));
-      const tmsF=tms.length?tms:employees.filter(e=>e.role==='Team Member');
+    // Does employee's approved window fully cover the shift hours?
+    function coversShift(emp, dateStr, shiftStart, shiftEnd) {
+      if (!isAvailOnDate(emp, dateStr)) return false;
+      if (!(emp.id in availByEmpId)) return true;
+      const dayName = new Date(dateStr + 'T12:00:00')
+        .toLocaleDateString('en-CA', { weekday: 'long' });
+      const w = availByEmpId[emp.id][dayName];
+      if (!w) return false;
+      return w.from <= shiftStart && w.to >= shiftEnd;
+    }
 
-      if(!mgrsF.length||!cooksF.length){ toast(`⚠️ Not enough staff for ${dayName} — skipping.`,'error'); continue; }
-
-      const m=[...mgrsF].sort(()=>Math.random()-.5);
-      const c=[...cooksF].sort(()=>Math.random()-.5);
-      const t=[...tmsF].sort(()=>Math.random()-.5);
-      const busy=[2,4,5,6].includes(d.getDay());
-      const shifts=[
-        {empId:m[0].id,empName:`${m[0].firstName} ${m[0].lastName}`,role:'Shift Manager',start:'09:30',end:'17:00'},
-        {empId:c[0].id,empName:`${c[0].firstName} ${c[0].lastName}`,role:'Cook',start:'09:30',end:'17:00'},
-        ...(t[0]?[{empId:t[0].id,empName:`${t[0].firstName} ${t[0].lastName}`,role:'Team Member',start:'10:00',end:'18:00'}]:[]),
-        {empId:(m[1]||m[0]).id,empName:`${(m[1]||m[0]).firstName} ${(m[1]||m[0]).lastName}`,role:'Shift Manager',start:'17:00',end:'23:30'},
-        {empId:(c[1]||c[0]).id,empName:`${(c[1]||c[0]).firstName} ${(c[1]||c[0]).lastName}`,role:'Cook',start:'17:00',end:'23:30'},
-        ...(t[1]?[{empId:t[1].id,empName:`${t[1].firstName} ${t[1].lastName}`,role:'Team Member',start:'17:00',end:'23:30'}]:[]),
-        ...(busy&&t[2]?[{empId:t[2].id,empName:`${t[2].firstName} ${t[2].lastName}`,role:'Team Member',start:'12:00',end:'20:00'}]:[])
+    // ── STEP 3: Smart pool builder ──────────────────────────────────────────
+    // Returns employees sorted: perfect-hours-match > day-available > last-resort
+    function buildPool(roleFn, dateStr, shiftStart, shiftEnd) {
+      const all    = employees.filter(roleFn);
+      const tier1  = all.filter(e =>  coversShift(e, dateStr, shiftStart, shiftEnd));
+      const tier2  = all.filter(e => !tier1.includes(e) && isAvailOnDate(e, dateStr));
+      const tier3  = all.filter(e => !tier1.includes(e) && !tier2.includes(e));
+      return [
+        ...[...tier1].sort(() => Math.random() - .5),
+        ...[...tier2].sort(() => Math.random() - .5),
+        ...[...tier3].sort(() => Math.random() - .5),
       ];
-      schedData[ds]=[];
-      for(const s of shifts){
-        const data={date:ds,...s,createdAt:FS.serverTimestamp()};
-        const ref=await db.collection('kfc_schedule').add(data);
-        schedData[ds].push({id:ref.id,...data}); added++;
+    }
+
+    // ── STEP 4: Build schedule ──────────────────────────────────────────────
+    const isMgr  = e => e.role === 'Shift Manager';
+    const isCook = e => e.role === 'Cook' || e.role.includes('Food');
+    const isTM   = e => e.role === 'Team Member';
+
+    let added = 0;
+    const conflicts = [];
+
+    for (let i = 0; i < days.length; i++) {
+      const d  = days[i];
+      const ds = fd(d);
+      if ((schedData[ds] || []).length) continue;
+
+      const dayName = new Date(ds + 'T12:00:00')
+        .toLocaleDateString('en-CA', { weekday: 'long' });
+      const busy = [2, 4, 5, 6].includes(d.getDay()); // Wed/Fri/Sat/Sun
+
+      // Build tiered pools for each shift window
+      const amMgr  = buildPool(isMgr,  ds, '09:30', '17:00');
+      const pmMgr  = buildPool(isMgr,  ds, '17:00', '23:30');
+      const amCook = buildPool(isCook, ds, '09:30', '17:00');
+      const pmCook = buildPool(isCook, ds, '17:00', '23:30');
+      const amTM   = buildPool(isTM,   ds, '10:00', '18:00');
+      const pmTM   = buildPool(isTM,   ds, '17:00', '23:30');
+      const midTM  = buildPool(isTM,   ds, '12:00', '20:00');
+
+      if (!amMgr.length || !amCook.length) {
+        conflicts.push(`${dayName}: no available manager or cook — day skipped`);
+        continue;
+      }
+
+      // Flag if we had to use last-resort (not available) staff
+      if (matchedCount > 0) {
+        if (!isAvailOnDate(amMgr[0],  ds)) conflicts.push(`${dayName}: ${amMgr[0].firstName} (Mgr AM) not available — no alternative`);
+        if (!isAvailOnDate(amCook[0], ds)) conflicts.push(`${dayName}: ${amCook[0].firstName} (Cook AM) not available — no alternative`);
+      }
+
+      // Compose shifts — pick best-tier staff, honour their preferred hours
+      const pick = (pool, start, end) =>
+        pool[0] ? { empId:pool[0].id, empName:`${pool[0].firstName} ${pool[0].lastName}`, start, end } : null;
+
+      const rawShifts = [
+        { ...pick(amMgr,  '09:30','17:00'), role:'Shift Manager' },
+        { ...pick(amCook, '09:30','17:00'), role:'Cook'          },
+        amTM[0]  ? { ...pick(amTM,  '10:00','18:00'), role:'Team Member'    } : null,
+        pmMgr[0] ? { ...pick(pmMgr, '17:00','23:30'), role:'Shift Manager'  } : null,
+        pmCook[0]? { ...pick(pmCook,'17:00','23:30'), role:'Cook'           } : null,
+        pmTM[0]  ? { ...pick(pmTM,  '17:00','23:30'), role:'Team Member'    } : null,
+        busy && midTM[0] ? { ...pick(midTM,'12:00','20:00'), role:'Team Member' } : null,
+      ].filter(Boolean);
+
+      // Deduplicate: one person can only appear once per day
+      const usedToday = new Set();
+      const finalShifts = rawShifts.filter(s => {
+        if (!s.empId || usedToday.has(s.empId)) return false;
+        usedToday.add(s.empId);
+        return true;
+      });
+
+      schedData[ds] = [];
+      for (const s of finalShifts) {
+        const data = { date:ds, ...s, createdAt:FS.serverTimestamp() };
+        const ref  = await db.collection('kfc_schedule').add(data);
+        schedData[ds].push({ id:ref.id, ...data });
+        added++;
       }
     }
+
+    // ── STEP 5: Render + summary ────────────────────────────────────────────
     renderSched();
-    const approvedCount=Object.keys(availMap).length;
-    toast(`Done — ${added} shifts added${approvedCount?` (used ${approvedCount} approved availability records)`:' (no availability data yet)'}.`,'success');
-  } catch(e){ toast('Error: '+e.message,'error'); }
+
+    if (conflicts.length) {
+      console.warn('[autoSchedule] Conflicts:', conflicts);
+      toast(`Schedule built — ${added} shifts. ⚠️ ${conflicts.length} coverage gap(s) — open console for details.`, 'info');
+    } else if (matchedCount > 0) {
+      toast(`✅ ${added} shifts scheduled — ${matchedCount} staff availability records used.`, 'success');
+    } else {
+      toast(`✅ ${added} shifts scheduled. No approved availability yet — all staff treated as available.`, 'success');
+    }
+
+  } catch (e) {
+    console.error('[autoSchedule] Fatal error:', e);
+    toast('Error building schedule: ' + e.message, 'error');
+  }
 }
 
 // ── PRODUCTS ────────────────────────────────────
@@ -1309,7 +1420,7 @@ async function saveAvail() {
     WD.forEach((day,i)=>{ const c=document.getElementById('ac-'+i); if(c?.checked) avail[day]={from:document.getElementById('af-'+i)?.value||'09:00',to:document.getElementById('ato-'+i)?.value||'17:00'}; });
     const name=CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email;
     await db.collection('kfc_availability').doc(CU.uid).set({
-      uid:CU.uid, name, availability:avail,
+      uid:CU.uid, name, email:CU.email, availability:avail,
       status:'pending', // reset to pending on every new submission
       updatedAt:FS.serverTimestamp()
     });
