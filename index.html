@@ -450,29 +450,6 @@ function doRegister() {
 
 function doLogout() { auth.signOut(); }
 
-auth.onAuthStateChanged(async user => {
-  if (user) {
-    CU = user;
-    const snap = await db.collection('users').doc(user.uid).get();
-    if (snap.exists) {
-      CUD = snap.data();
-      isAdmin = CUD.isAdmin===true || CUD.email===ADMIN_EMAIL;
-    } else {
-      isAdmin = user.email === ADMIN_EMAIL;
-      CUD = isAdmin
-        ? { firstName:'Mohamed Hedi', lastName:'Bouhoula', role:'Store Manager', isAdmin:true }
-        : { firstName: user.email.split('@')[0], lastName:'', role:'Employee', isAdmin:false };
-      if (isAdmin) await db.collection('users').doc(user.uid).set({ ...CUD, email:user.email, createdAt:firebase.firestore.FieldValue.serverTimestamp() });
-    }
-    await loadAll();
-    showApp();
-  } else {
-    CU=null; CUD=null; isAdmin=false;
-    document.getElementById('app').classList.remove('active');
-    document.getElementById('login-page').classList.add('active');
-  }
-});
-
 // ── APP SHELL ─────────────────────────────────────
 function showApp() {
   document.getElementById('login-page').classList.remove('active');
@@ -913,15 +890,50 @@ async function renderMyMsgs() {
 }
 
 // ── BOOT ──────────────────────────────────────────
-window.addEventListener('load', () => {
+// Always dismiss loading screen and show login after 3s max
+// This handles cases where Firebase onAuthStateChanged never fires
+// (e.g. unauthorized domain, network issue, script blocked)
+let appBooted = false;
+function bootApp() {
+  if (appBooted) return;
+  appBooted = true;
+  const ls = document.getElementById('loading-screen');
+  ls.style.opacity = '0';
   setTimeout(() => {
-    const ls=document.getElementById('loading-screen');
-    ls.style.opacity='0';
-    setTimeout(()=>{
-      ls.style.display='none';
-      if(!CU) document.getElementById('login-page').classList.add('active');
-    },500);
-  }, 1500);
+    ls.style.display = 'none';
+    if (!CU) document.getElementById('login-page').classList.add('active');
+  }, 500);
+}
+
+// Firebase should trigger this when auth state is known
+// Wrap original onAuthStateChanged to also call bootApp
+auth.onAuthStateChanged(async user => {
+  bootApp(); // always dismiss loading screen once Firebase responds
+  if (user) {
+    CU = user;
+    const snap = await db.collection('users').doc(user.uid).get();
+    if (snap.exists) {
+      CUD = snap.data();
+      isAdmin = CUD.isAdmin===true || CUD.email===ADMIN_EMAIL;
+    } else {
+      isAdmin = user.email === ADMIN_EMAIL;
+      CUD = isAdmin
+        ? { firstName:'Mohamed Hedi', lastName:'Bouhoula', role:'Store Manager', isAdmin:true }
+        : { firstName: user.email.split('@')[0], lastName:'', role:'Employee', isAdmin:false };
+      if (isAdmin) await db.collection('users').doc(user.uid).set({ ...CUD, email:user.email, createdAt:firebase.firestore.FieldValue.serverTimestamp() });
+    }
+    await loadAll();
+    showApp();
+  } else {
+    CU=null; CUD=null; isAdmin=false;
+    document.getElementById('app').classList.remove('active');
+    document.getElementById('login-page').classList.add('active');
+  }
+});
+
+// Fallback: if Firebase never responds in 4 seconds, show login anyway
+window.addEventListener('load', () => {
+  setTimeout(bootApp, 4000);
 });
 </script>
 </body>
