@@ -145,10 +145,44 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .empty{text-align:center;padding:40px;color:var(--mid)}
 .empty .ei{font-size:40px;margin-bottom:12px}
 .ac{display:flex;gap:6px;flex-wrap:wrap}
-@media(max-width:768px){.sidebar{transform:translateX(-100%)}.main-content{margin-left:0}.week-grid{grid-template-columns:repeat(2,1fr)}.avail-grid{grid-template-columns:repeat(2,1fr)}.order-grid{grid-template-columns:1fr}.form-row{grid-template-columns:1fr}}
+/* ── MOBILE MENU ── */
+#mob-menu-btn{display:none;position:fixed;top:14px;left:14px;z-index:200;background:var(--red);border:none;border-radius:8px;color:white;width:40px;height:40px;font-size:20px;cursor:pointer;align-items:center;justify-content:center}
+#mob-overlay{display:none;position:fixed;inset:0;z-index:49;background:rgba(0,0,0,.6)}
+.sidebar-open .sidebar{transform:translateX(0)!important}
+/* ── VACATION BADGE ── */
+.vac-badge{background:rgba(168,85,247,.2);color:#c084fc;border:1px solid rgba(168,85,247,.4);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+/* ── AVAIL APPROVAL ── */
+.avail-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:18px 20px;margin-bottom:14px;transition:border-color .2s}
+.avail-card.pending{border-left:3px solid var(--gold)}
+.avail-card.approved{border-left:3px solid var(--green)}
+.avail-card.rejected{border-left:3px solid var(--red)}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.sd-pending{background:var(--gold)}
+.sd-approved{background:var(--green)}
+.sd-rejected{background:var(--red)}
+/* ── VACATION MODAL ── */
+.emp-vac-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.emp-vac-row:last-child{border-bottom:none}
+@media(max-width:768px){
+  #mob-menu-btn{display:flex}
+  .sidebar{transform:translateX(-100%);z-index:100}
+  .main-content{margin-left:0}
+  .week-grid{grid-template-columns:repeat(2,1fr)}
+  .avail-grid{grid-template-columns:repeat(2,1fr)}
+  .order-grid{grid-template-columns:1fr}
+  .form-row{grid-template-columns:1fr}
+  .top-bar{padding:14px 16px 14px 64px}
+  .page{padding:16px}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  table{font-size:12px}
+  th,td{padding:8px 10px}
+}
 </style>
 </head>
 <body>
+
+<button id="mob-menu-btn" onclick="toggleMobMenu()">☰</button>
+<div id="mob-overlay" onclick="closeMobMenu()"></div>
 
 <div id="loading-screen">
   <div class="loader-logo">🍗 KFC</div>
@@ -233,6 +267,38 @@ tr:hover td{background:rgba(255,255,255,.02)}
   </div>
 </div>
 
+<!-- VACATION MANAGEMENT MODAL -->
+<div class="modal-overlay" id="vac-modal">
+  <div class="modal-box" style="max-width:560px">
+    <button class="modal-close" onclick="closeM('vac-modal')">✕</button>
+    <div class="modal-title">🏖️ Vacation Management</div>
+    <p style="font-size:13px;color:var(--light);margin-bottom:20px">Employees on vacation are automatically excluded from scheduling until their return date.</p>
+    <div id="vac-list"></div>
+    <div style="margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.08)">
+      <div class="card-title" style="font-size:15px;margin-bottom:14px">➕ Add Vacation</div>
+      <div class="form-row"><div class="fg"><label>Employee</label><select id="vac-emp-sel"></select></div></div>
+      <div class="form-row">
+        <div class="fg"><label>Start Date</label><input type="date" id="vac-start"></div>
+        <div class="fg"><label>End Date</label><input type="date" id="vac-end"></div>
+      </div>
+      <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:4px" onclick="addVacation()">✅ Add Vacation</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESET SCHEDULE CONFIRMATION -->
+<div class="modal-overlay" id="reset-sched-modal">
+  <div class="modal-box" style="max-width:400px">
+    <button class="modal-close" onclick="closeM('reset-sched-modal')">✕</button>
+    <div class="modal-title">⚠️ Reset Schedule</div>
+    <p style="font-size:14px;color:var(--lighter);margin-bottom:18px">This will permanently delete all shifts for the currently displayed week. This action cannot be undone.</p>
+    <div style="display:flex;gap:12px">
+      <button class="btn btn-g" style="flex:1;justify-content:center" onclick="closeM('reset-sched-modal')">Cancel</button>
+      <button class="btn btn-d" style="flex:1;justify-content:center" onclick="confirmResetSched()">🗑️ Delete All Shifts</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADD SHIFT -->
 <div class="modal-overlay" id="add-shift-modal">
   <div class="modal-box">
@@ -304,9 +370,12 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <span id="wklabel" style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;flex:1;text-align:center"></span>
         <button class="btn btn-g" onclick="nextWeek()">Next →</button>
         <button class="btn btn-p" onclick="autoSchedule()">⚡ Auto-Schedule</button>
+        <button class="btn btn-w" onclick="openM('reset-sched-modal')">🔄 Reset Week</button>
+        <button class="btn btn-g" onclick="openVacModal()">🏖️ Vacations</button>
         <button class="btn btn-g" onclick="window.print()">🖨️ Print</button>
       </div>
       <div id="sched-val" style="margin-bottom:16px"></div>
+      <div id="avail-alert" style="margin-bottom:16px"></div>
       <div class="week-grid" id="wgrid"></div>
     </div>
 
@@ -348,8 +417,17 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <!-- ADMIN AVAILABILITY -->
     <div class="page" id="page-availability">
       <div class="card">
-        <div class="card-title">📅 Employee Availability Submissions</div>
-        <p style="font-size:13px;color:var(--light);margin-bottom:20px">All availability submitted by your team members.</p>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div class="card-title" style="margin-bottom:0">📅 Employee Availability</div>
+          <div id="avail-pending-count" style="font-size:13px;color:var(--gold)"></div>
+        </div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:16px">Review and approve availability submissions. Approved availability is used in Auto-Schedule.</p>
+        <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
+          <button class="btn btn-g btn-sm" id="af-all" onclick="setAvailFilter('all')" style="border-color:var(--gold);color:var(--gold)">All</button>
+          <button class="btn btn-g btn-sm" id="af-pending" onclick="setAvailFilter('pending')">⏳ Pending</button>
+          <button class="btn btn-g btn-sm" id="af-approved" onclick="setAvailFilter('approved')">✅ Approved</button>
+          <button class="btn btn-g btn-sm" id="af-rejected" onclick="setAvailFilter('rejected')">❌ Rejected</button>
+        </div>
         <div id="avail-admin-list"></div>
       </div>
     </div>
@@ -365,10 +443,14 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
     <!-- EMP AVAILABILITY -->
     <div class="page" id="page-emp-avail">
-      <div class="card"><div class="card-title">📅 My Availability</div>
-        <p style="font-size:13px;color:var(--light);margin-bottom:20px">Check days you're available and set preferred hours.</p>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:10px">
+          <div class="card-title" style="margin-bottom:0">📅 My Availability</div>
+          <div id="avail-status-badge"></div>
+        </div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:20px">Check days you're available and set preferred hours. Your manager will review and approve.</p>
         <div class="avail-grid" id="avail-g"></div>
-        <button class="btn btn-p" style="margin-top:20px" onclick="saveAvail()">💾 Save Availability</button>
+        <button class="btn btn-p" style="margin-top:20px" onclick="saveAvail()">💾 Save & Submit Availability</button>
       </div>
     </div>
 
@@ -409,6 +491,7 @@ let CU=null, CUD=null, isAdmin=false;
 let employees=[], schedData={}, products=[], messages=[];
 let weekOff=0, ordQty={};
 let appBooted=false;
+let vacations=[];
 
 // ── HELPERS ──────────────────────────────────────
 function toast(msg, type='info') {
@@ -434,6 +517,15 @@ function exSt(d){ return d<0?'red':d<=3?'orange':'green'; }
 function ini(n){ return (n||'').split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?'; }
 function openM(id){ document.getElementById(id).classList.add('active'); }
 function closeM(id){ document.getElementById(id).classList.remove('active'); }
+function toggleMobMenu(){
+  document.body.classList.toggle('sidebar-open');
+  const ov=document.getElementById('mob-overlay');
+  ov.style.display=document.body.classList.contains('sidebar-open')?'block':'none';
+}
+function closeMobMenu(){
+  document.body.classList.remove('sidebar-open');
+  document.getElementById('mob-overlay').style.display='none';
+}
 document.querySelectorAll('.modal-overlay').forEach(m=>
   m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('active'); })
 );
@@ -568,7 +660,7 @@ function buildNav() {
       const b=document.createElement('button');
       b.className='nav-item'; b.id='nav-'+it.id;
       b.innerHTML=`<span class="icon">${it.i}</span>${it.l}`;
-      b.onclick=()=>goTo(it.id);
+      b.onclick=()=>{ goTo(it.id); closeMobMenu(); };
       nav.appendChild(b);
     });
   });
@@ -583,6 +675,7 @@ function goTo(pid) {
     document.getElementById('ptitle').textContent={
       dashboard:'Dashboard',employees:'Employees',schedule:'Weekly Schedule',
       products:'Expiry Tracker',orders:'Order Planning',messages:'Messages',
+      availability:'Availability',
       'emp-dashboard':'My Dashboard','emp-avail':'My Availability','emp-msg':'Messages'
     }[pid]||'KFC';
     if(pid==='schedule') renderSched();
@@ -603,6 +696,7 @@ async function loadAll() {
   try { await loadSched(); } catch(e){ console.warn('loadSched:',e); schedData={}; }
   try { await loadProds(); } catch(e){ console.warn('loadProds:',e); products=[]; }
   try { await loadMsgs(); } catch(e){ console.warn('loadMsgs:',e); messages=[]; }
+  try { await loadVacations(); } catch(e){ console.warn('loadVacations:',e); vacations=[]; }
   if(isAdmin) renderDash();
 }
 
@@ -663,6 +757,28 @@ async function loadMsgs() {
   }
 }
 
+async function loadVacations() {
+  const snap=await db.collection('kfc_vacations').get();
+  vacations=snap.docs.map(d=>({id:d.id,...d.data()}));
+}
+
+// Check if employee is on vacation for a given date
+function isOnVacation(empId, dateStr) {
+  const d=new Date(dateStr+'T00:00:00');
+  return vacations.some(v=>{
+    if(v.empId!==empId) return false;
+    const s=new Date(v.startDate+'T00:00:00');
+    const e=new Date(v.endDate+'T23:59:59');
+    return d>=s && d<=e;
+  });
+}
+
+// Check if employee is on vacation for ANY day in the current week
+function isOnVacationThisWeek(empId) {
+  const days=getWeekDays();
+  return days.some(d=>isOnVacation(empId, fd(d)));
+}
+
 // ── DASHBOARD ────────────────────────────────────
 function renderDash() {
   try {
@@ -687,24 +803,29 @@ function renderEmps() {
   try {
     const search=(document.getElementById('es').value||'').toLowerCase();
     const fRole=document.getElementById('ef').value;
+    const today=fd(new Date());
     const filtered=employees.filter(e=>`${e.firstName||''} ${e.lastName||''}`.toLowerCase().includes(search)&&(!fRole||e.role===fRole));
     const rc={'Shift Manager':'b-red','Cook':'b-gold','Team Member':'b-blue','Assistant General Manager':'b-green'};
     document.getElementById('emp-tbody').innerHTML=filtered.length
-      ?filtered.map(e=>`<tr>
-        <td><strong>${e.lastName||''}, ${e.firstName||''}</strong></td>
-        <td style="font-family:'Barlow Condensed',sans-serif;color:var(--light)">${e.employeeId||'—'}</td>
-        <td>${e.site||'—'}</td>
-        <td><span class="badge ${rc[e.role]||'b-blue'}">${e.role||'—'}</span></td>
-        <td>$${parseFloat(e.rate||0).toFixed(2)}</td>
-        <td>${e.hasAccount
-          ?`<span class="badge b-green">✅ Active</span>${e.accountEmail?`<br><span style="font-size:11px;color:var(--light)">${e.accountEmail}</span>`:''}`
-          :`<button class="btn btn-w btn-sm" onclick="openCre('${e.id}')">🔑 Create Account</button>`
-        }</td>
-        <td><div class="ac">
-          <button class="btn btn-g btn-sm" onclick="openEdit('${e.id}')">✏️</button>
-          <button class="btn btn-d btn-sm" onclick="delEmp('${e.id}')">🗑️</button>
-        </div></td>
-      </tr>`).join('')
+      ?filtered.map(e=>{
+        const onVac=vacations.some(v=>v.empId===e.id&&today>=v.startDate&&today<=v.endDate);
+        const futureVac=vacations.find(v=>v.empId===e.id&&v.startDate>today);
+        return`<tr>
+          <td><strong>${e.lastName||''}, ${e.firstName||''}</strong>${onVac?` <span class="vac-badge">ON VACATION</span>`:''}${futureVac?` <span class="badge" style="background:rgba(168,85,247,.1);color:#c084fc;font-size:10px">🏖️ from ${futureVac.startDate}</span>`:''}</td>
+          <td style="font-family:'Barlow Condensed',sans-serif;color:var(--light)">${e.employeeId||'—'}</td>
+          <td>${e.site||'—'}</td>
+          <td><span class="badge ${rc[e.role]||'b-blue'}">${e.role||'—'}</span></td>
+          <td>$${parseFloat(e.rate||0).toFixed(2)}</td>
+          <td>${e.hasAccount
+            ?`<span class="badge b-green">✅ Active</span>${e.accountEmail?`<br><span style="font-size:11px;color:var(--light)">${e.accountEmail}</span>`:''}`
+            :`<button class="btn btn-w btn-sm" onclick="openCre('${e.id}')">🔑 Create Account</button>`
+          }</td>
+          <td><div class="ac">
+            <button class="btn btn-g btn-sm" onclick="openEdit('${e.id}')">✏️</button>
+            <button class="btn btn-d btn-sm" onclick="delEmp('${e.id}')">🗑️</button>
+          </div></td>
+        </tr>`;
+      }).join('')
       :`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--mid)">No employees found</td></tr>`;
   } catch(e){ console.error('renderEmps:',e); }
 }
@@ -790,12 +911,33 @@ function renderSched() {
     document.getElementById('wklabel').textContent=days[0].toLocaleDateString('en-CA',{month:'short',day:'numeric'})+' – '+days[6].toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'});
     const g=document.getElementById('wgrid'); g.innerHTML='';
     const tod=fd(new Date());
+    // Show employees on vacation this week
+    const vacThisWeek=vacations.filter(v=>{
+      const ws=fd(days[0]), we=fd(days[6]);
+      return v.startDate<=we && v.endDate>=ws;
+    });
+    const vacAlertEl=document.getElementById('avail-alert');
+    if(vacAlertEl){
+      vacAlertEl.innerHTML=vacThisWeek.length
+        ?`<div class="alert-b" style="background:rgba(168,85,247,.1);border-color:rgba(168,85,247,.3);color:#c084fc">🏖️ On vacation this week: ${vacThisWeek.map(v=>{const e=employees.find(x=>x.id===v.empId);return e?`${e.firstName} ${e.lastName}`:'?';}).join(', ')}</div>`
+        :'';
+    }
     days.forEach((d,i)=>{
       const ds=fd(d), sh=schedData[ds]||[], isT=ds===tod;
       const col=document.createElement('div'); col.className='day-col';
       if(isT) col.style.borderTop='2px solid var(--red)';
       col.innerHTML=`<div class="day-header"><div class="day-name" style="color:${isT?'var(--red)':'var(--white)'}">${DN[i]}</div><div style="font-size:11px;color:var(--light)">${d.getDate()}</div></div>
-      ${sh.length?sh.map(s=>`<div class="shift-slot"><div class="shift-time">${s.start}–${s.end}</div><div class="shift-emp">${s.empName||'—'}</div><div style="display:flex;justify-content:space-between;align-items:center"><div class="shift-role">${s.role}</div><button style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:10px" onclick="delShift('${s.id}','${ds}')">✕</button></div></div>`).join(''):`<div style="padding:8px;text-align:center;font-size:10px;color:var(--mid)">No shifts</div>`}
+      ${sh.length?sh.map(s=>{
+        const onVac=isOnVacation(s.empId,ds);
+        return`<div class="shift-slot" style="${onVac?'background:rgba(168,85,247,.1);':''}">
+          <div class="shift-time">${s.start}–${s.end}</div>
+          <div class="shift-emp">${s.empName||'—'}${onVac?' 🏖️':''}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="shift-role">${s.role}</div>
+            <button style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:10px" onclick="delShift('${s.id}','${ds}')">✕</button>
+          </div>
+        </div>`;
+      }).join(''):`<div style="padding:8px;text-align:center;font-size:10px;color:var(--mid)">No shifts</div>`}
       <button class="btn-add-shift" onclick="openAddShift('${ds}','${DN[i]}')">+ Add Shift</button>`;
       g.appendChild(col);
     });
@@ -835,20 +977,147 @@ async function delShift(sid,ds) {
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
+async function confirmResetSched() {
+  try {
+    const days=getWeekDays();
+    let deleted=0;
+    for(const d of days){
+      const ds=fd(d);
+      const shifts=schedData[ds]||[];
+      for(const s of shifts){
+        await db.collection('kfc_schedule').doc(s.id).delete();
+        deleted++;
+      }
+      schedData[ds]=[];
+    }
+    closeM('reset-sched-modal');
+    renderSched();
+    toast(`Schedule cleared — ${deleted} shifts removed.`,'success');
+  } catch(e){ toast('Error resetting schedule: '+e.message,'error'); }
+}
+
+// ── VACATION MANAGEMENT ──────────────────────────
+function openVacModal() {
+  // Populate employee selector
+  const sel=document.getElementById('vac-emp-sel');
+  sel.innerHTML=employees.map(e=>`<option value="${e.id}">${e.lastName||''}, ${e.firstName||''}</option>`).join('');
+  // Set default dates
+  const today=fd(new Date());
+  document.getElementById('vac-start').value=today;
+  document.getElementById('vac-end').value=today;
+  renderVacList();
+  openM('vac-modal');
+}
+
+function renderVacList() {
+  const el=document.getElementById('vac-list');
+  if(!el) return;
+  const today=fd(new Date());
+  const sorted=[...vacations].sort((a,b)=>a.startDate.localeCompare(b.startDate));
+  if(!sorted.length){
+    el.innerHTML=`<div class="empty" style="padding:20px"><div class="ei">🏖️</div><p>No vacations scheduled.</p></div>`;
+    return;
+  }
+  el.innerHTML=sorted.map(v=>{
+    const emp=employees.find(e=>e.id===v.empId);
+    const name=emp?`${emp.firstName} ${emp.lastName}`:'Unknown';
+    const isActive=today>=v.startDate&&today<=v.endDate;
+    const isPast=today>v.endDate;
+    const statusBadge=isActive
+      ?`<span class="vac-badge">ACTIVE</span>`
+      :isPast
+        ?`<span class="badge" style="background:rgba(255,255,255,.05);color:var(--mid)">Past</span>`
+        :`<span class="badge b-gold">Upcoming</span>`;
+    return`<div class="emp-vac-row">
+      <div>
+        <div style="font-weight:600;color:var(--white);font-size:14px">${name} ${statusBadge}</div>
+        <div style="font-size:12px;color:var(--light);margin-top:3px">📅 ${v.startDate} → ${v.endDate}</div>
+      </div>
+      <button class="btn btn-d btn-sm" onclick="deleteVacation('${v.id}')">🗑️</button>
+    </div>`;
+  }).join('');
+}
+
+async function addVacation() {
+  try {
+    const empId=document.getElementById('vac-emp-sel').value;
+    const startDate=document.getElementById('vac-start').value;
+    const endDate=document.getElementById('vac-end').value;
+    if(!empId||!startDate||!endDate){ toast('Select employee and dates.','error'); return; }
+    if(startDate>endDate){ toast('End date must be after start date.','error'); return; }
+    const emp=employees.find(e=>e.id===empId);
+    const ref=await db.collection('kfc_vacations').add({
+      empId, empName:emp?`${emp.firstName} ${emp.lastName}`:'?',
+      startDate, endDate, createdAt:FS.serverTimestamp()
+    });
+    vacations.push({id:ref.id,empId,empName:emp?`${emp.firstName} ${emp.lastName}`:'?',startDate,endDate});
+    renderVacList();
+    renderEmps();
+    toast(`Vacation added for ${emp?.firstName||'employee'}.`,'success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+async function deleteVacation(vid) {
+  if(!confirm('Remove this vacation?')) return;
+  try {
+    await db.collection('kfc_vacations').doc(vid).delete();
+    vacations=vacations.filter(v=>v.id!==vid);
+    renderVacList();
+    renderEmps();
+    toast('Vacation removed.','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
 async function autoSchedule() {
   try {
     const days=getWeekDays();
-    const mgrs=employees.filter(e=>e.role==='Shift Manager');
-    const cooks=employees.filter(e=>e.role==='Cook'||e.role.includes('Food'));
-    const tms=employees.filter(e=>e.role==='Team Member');
-    if(!mgrs.length||!cooks.length){ toast('Need at least 1 Shift Manager and 1 Cook.','error'); return; }
+    // Load approved availability from Firestore
+    let availMap={};
+    try {
+      const availSnap=await db.collection('kfc_availability').where('status','==','approved').get();
+      availSnap.docs.forEach(d=>{ const dt=d.data(); if(dt.uid) availMap[dt.uid]=dt.availability||{}; });
+      // Also load by name match for employees without UID linked
+      const allAvailSnap=await db.collection('kfc_availability').get();
+      allAvailSnap.docs.forEach(d=>{ const dt=d.data(); if(dt.status==='approved'&&dt.uid&&!availMap[dt.uid]) availMap[dt.uid]=dt.availability||{}; });
+    } catch(ae){ console.warn('Could not load availability:',ae); }
+
+    // Helper: is employee available on a given day?
+    function empAvailOnDay(emp, dayName) {
+      // Check vacation first
+      const ds=fd(days.find(d=>d.toLocaleDateString('en-CA',{weekday:'long'})===dayName)||new Date());
+      if(isOnVacation(emp.id, ds)) return false;
+      // Check availability if we have approved data
+      const uid=emp.accountUid||emp.id;
+      if(availMap[uid]) {
+        return !!availMap[uid][dayName];
+      }
+      // No availability data = assume available (fallback)
+      return true;
+    }
+
+    const WDN=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     let added=0;
-    for(const d of days){
+    for(let i=0;i<days.length;i++){
+      const d=days[i];
       const ds=fd(d);
-      if((schedData[ds]||[]).length) continue;
-      const m=[...mgrs].sort(()=>Math.random()-.5);
-      const c=[...cooks].sort(()=>Math.random()-.5);
-      const t=[...tms].sort(()=>Math.random()-.5);
+      const dayName=WDN[i];
+      if((schedData[ds]||[]).length) continue; // skip days that already have shifts
+
+      // Filter employees by availability & vacation for this day
+      const mgrs=employees.filter(e=>e.role==='Shift Manager'&&empAvailOnDay(e,dayName));
+      const cooks=employees.filter(e=>(e.role==='Cook'||e.role.includes('Food'))&&empAvailOnDay(e,dayName));
+      const tms=employees.filter(e=>e.role==='Team Member'&&empAvailOnDay(e,dayName));
+
+      // Fallback: if filtered pools are empty, use all employees of that role (ignoring availability gaps)
+      const mgrsF=mgrs.length?mgrs:employees.filter(e=>e.role==='Shift Manager');
+      const cooksF=cooks.length?cooks:employees.filter(e=>e.role==='Cook'||e.role.includes('Food'));
+      const tmsF=tms.length?tms:employees.filter(e=>e.role==='Team Member');
+
+      if(!mgrsF.length||!cooksF.length){ toast(`⚠️ Not enough staff for ${dayName} — skipping.`,'error'); continue; }
+
+      const m=[...mgrsF].sort(()=>Math.random()-.5);
+      const c=[...cooksF].sort(()=>Math.random()-.5);
+      const t=[...tmsF].sort(()=>Math.random()-.5);
       const busy=[2,4,5,6].includes(d.getDay());
       const shifts=[
         {empId:m[0].id,empName:`${m[0].firstName} ${m[0].lastName}`,role:'Shift Manager',start:'09:30',end:'17:00'},
@@ -866,7 +1135,9 @@ async function autoSchedule() {
         schedData[ds].push({id:ref.id,...data}); added++;
       }
     }
-    renderSched(); toast(`Done — ${added} shifts added.`,'success');
+    renderSched();
+    const approvedCount=Object.keys(availMap).length;
+    toast(`Done — ${added} shifts added${approvedCount?` (used ${approvedCount} approved availability records)`:' (no availability data yet)'}.`,'success');
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
@@ -994,18 +1265,71 @@ function renderAvail() {
       <input type="time" id="af-${i}" value="09:00">
       <input type="time" id="ato-${i}" value="17:00">
     </div></div>`).join('');
+  // Load and pre-fill saved availability
+  if(CU) loadMyAvailability();
 }
+
+async function loadMyAvailability() {
+  try {
+    const snap=await db.collection('kfc_availability').doc(CU.uid).get();
+    if(snap.exists){
+      const data=snap.data();
+      const avail=data.availability||{};
+      WD.forEach((day,i)=>{
+        if(avail[day]){
+          const cb=document.getElementById('ac-'+i);
+          if(cb){ cb.checked=true; togAv(i);
+            const f=document.getElementById('af-'+i); if(f) f.value=avail[day].from||'09:00';
+            const t=document.getElementById('ato-'+i); if(t) t.value=avail[day].to||'17:00';
+          }
+        }
+      });
+      // Show status badge
+      const statusBadge=document.getElementById('avail-status-badge');
+      if(statusBadge){
+        const st=data.status||'pending';
+        statusBadge.innerHTML=st==='approved'
+          ?`<span class="badge b-green">✅ Approved by Manager</span>`
+          :st==='rejected'
+            ?`<span class="badge b-red">❌ Rejected — Please resubmit</span>`
+            :`<span class="badge b-gold">⏳ Pending Manager Approval</span>`;
+      }
+    } else {
+      const statusBadge=document.getElementById('avail-status-badge');
+      if(statusBadge) statusBadge.innerHTML=`<span style="font-size:12px;color:var(--light)">Not submitted yet</span>`;
+    }
+  } catch(e){ console.warn('loadMyAvailability:',e); }
+}
+
 function togAv(i){ const c=document.getElementById('ac-'+i); document.getElementById('at-'+i).style.display=c.checked?'flex':'none'; document.getElementById('ad-'+i).classList.toggle('on',c.checked); }
+
 async function saveAvail() {
   try {
     const avail={};
     WD.forEach((day,i)=>{ const c=document.getElementById('ac-'+i); if(c?.checked) avail[day]={from:document.getElementById('af-'+i)?.value||'09:00',to:document.getElementById('ato-'+i)?.value||'17:00'}; });
-    await db.collection('kfc_availability').doc(CU.uid).set({uid:CU.uid,name:CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email,availability:avail,updatedAt:FS.serverTimestamp()});
-    toast('Availability saved!','success');
+    const name=CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email;
+    await db.collection('kfc_availability').doc(CU.uid).set({
+      uid:CU.uid, name, availability:avail,
+      status:'pending', // reset to pending on every new submission
+      updatedAt:FS.serverTimestamp()
+    });
+    const statusBadge=document.getElementById('avail-status-badge');
+    if(statusBadge) statusBadge.innerHTML=`<span class="badge b-gold">⏳ Pending Manager Approval</span>`;
+    toast('Availability submitted — waiting for manager approval.','success');
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 // ── ADMIN AVAILABILITY ──────────────────────────
+let availFilter='all';
+function setAvailFilter(f){
+  availFilter=f;
+  ['all','pending','approved','rejected'].forEach(x=>{
+    const btn=document.getElementById('af-'+x);
+    if(btn){ btn.style.borderColor=x===f?'var(--gold)':''; btn.style.color=x===f?'var(--gold)':''; }
+  });
+  renderAdminAvail();
+}
+
 async function renderAdminAvail() {
   const el = document.getElementById('avail-admin-list');
   if (!el) return;
@@ -1014,38 +1338,65 @@ async function renderAdminAvail() {
     const snap = await db.collection('kfc_availability').get();
     if (snap.empty) {
       el.innerHTML = '<div class="empty"><div class="ei">📭</div><p>No availability submitted yet.</p></div>';
+      document.getElementById('avail-pending-count').textContent='';
       return;
     }
     const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
     const dayShort = {'Monday':'Mon','Tuesday':'Tue','Wednesday':'Wed','Thursday':'Thu','Friday':'Fri','Saturday':'Sat','Sunday':'Sun'};
     const dayColor = {'Monday':'var(--blue)','Tuesday':'var(--gold)','Wednesday':'var(--green)','Thursday':'var(--orange)','Friday':'var(--red)','Saturday':'#a855f7','Sunday':'#ec4899'};
+    
+    let allDocs=snap.docs.map(d=>({id:d.id,...d.data()}));
+    const pendingCount=allDocs.filter(d=>!d.status||d.status==='pending').length;
+    const pc=document.getElementById('avail-pending-count');
+    if(pc) pc.textContent=pendingCount?`⏳ ${pendingCount} pending approval`:'';
+
+    // Apply filter
+    if(availFilter!=='all'){
+      allDocs=allDocs.filter(d=>{
+        const st=d.status||'pending';
+        return st===availFilter;
+      });
+    }
+
+    if(!allDocs.length){
+      el.innerHTML=`<div class="empty"><div class="ei">🔍</div><p>No ${availFilter} submissions.</p></div>`;
+      return;
+    }
+
     let html = '';
-    snap.docs.forEach(doc => {
-      const data = doc.data();
+    allDocs.forEach(data => {
       const name = data.name || 'Unknown';
       const avail = data.availability || {};
       const updated = data.updatedAt?.toDate ? data.updatedAt.toDate().toLocaleDateString('en-CA') : '—';
       const availDays = days.filter(d => avail[d]);
+      const status=data.status||'pending';
+      const statusColor=status==='approved'?'var(--green)':status==='rejected'?'var(--red)':'var(--gold)';
+      const statusLabel=status==='approved'?'✅ Approved':status==='rejected'?'❌ Rejected':'⏳ Pending';
       html += `
-        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:18px 20px;margin-bottom:14px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="avail-card ${status}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px">
             <div style="display:flex;align-items:center;gap:10px">
-              <div style="width:36px;height:36px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px">${ini(name)}</div>
+              <div style="width:36px;height:36px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px;flex-shrink:0">${ini(name)}</div>
               <div>
                 <div style="font-weight:600;font-size:15px;color:var(--white)">${name}</div>
-                <div style="font-size:11px;color:var(--light)">Updated: ${updated}</div>
+                <div style="font-size:11px;color:var(--light)">Submitted: ${updated} · <span style="color:${statusColor}">${statusLabel}</span></div>
               </div>
             </div>
-            <span class="badge b-green">${availDays.length} day${availDays.length!==1?'s':''} available</span>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="badge b-green">${availDays.length} day${availDays.length!==1?'s':''}</span>
+              ${status!=='approved'?`<button class="btn btn-s btn-sm" onclick="setAvailStatus('${data.id}','approved')">✅ Approve</button>`:''}
+              ${status!=='rejected'?`<button class="btn btn-d btn-sm" onclick="setAvailStatus('${data.id}','rejected')">❌ Reject</button>`:''}
+              ${status!=='pending'?`<button class="btn btn-g btn-sm" onclick="setAvailStatus('${data.id}','pending')">↩ Reset</button>`:''}
+            </div>
           </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
             ${days.map(d => {
               const isAvail = avail[d];
-              return `<div style="flex:1;min-width:70px;background:${isAvail?'rgba(34,197,94,.1)':'rgba(255,255,255,.03)'};border:1px solid ${isAvail?'rgba(34,197,94,.3)':'rgba(255,255,255,.06)'};border-radius:8px;padding:8px 6px;text-align:center">
-                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:${isAvail?dayColor[d]:'var(--mid)'}">${dayShort[d]}</div>
+              return `<div style="flex:1;min-width:62px;background:${isAvail?'rgba(34,197,94,.1)':'rgba(255,255,255,.03)'};border:1px solid ${isAvail?'rgba(34,197,94,.3)':'rgba(255,255,255,.06)'};border-radius:8px;padding:7px 5px;text-align:center">
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;color:${isAvail?dayColor[d]:'var(--mid)'}">${dayShort[d]}</div>
                 ${isAvail
-                  ? `<div style="font-size:10px;color:var(--green);margin-top:4px">✅</div><div style="font-size:10px;color:var(--light);margin-top:2px">${avail[d].from}–${avail[d].to}</div>`
-                  : `<div style="font-size:10px;color:var(--mid);margin-top:4px">✕</div>`
+                  ? `<div style="font-size:10px;color:var(--green);margin-top:3px">✅</div><div style="font-size:9px;color:var(--light);margin-top:1px">${avail[d].from}–${avail[d].to}</div>`
+                  : `<div style="font-size:10px;color:var(--mid);margin-top:3px">✕</div>`
                 }
               </div>`;
             }).join('')}
@@ -1054,9 +1405,17 @@ async function renderAdminAvail() {
     });
     el.innerHTML = html;
   } catch(e) {
-    el.innerHTML = `<div class="empty"><div class="ei">⚠️</div><p>Error loading: ${e.message}</p></div>`;
+    el.innerHTML = `<div class="empty"><div class="ei">⚠️</div><p>Error: ${e.message}</p></div>`;
     console.error('renderAdminAvail:', e);
   }
+}
+
+async function setAvailStatus(docId, status) {
+  try {
+    await db.collection('kfc_availability').doc(docId).update({status, reviewedAt:FS.serverTimestamp()});
+    toast(`Availability ${status==='approved'?'approved ✅':status==='rejected'?'rejected ❌':'reset ↩'}.`, status==='approved'?'success':status==='rejected'?'error':'info');
+    renderAdminAvail();
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 // ── EMP MESSAGES ────────────────────────────────
