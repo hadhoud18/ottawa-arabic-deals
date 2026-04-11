@@ -345,6 +345,15 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </div>
 
+    <!-- ADMIN AVAILABILITY -->
+    <div class="page" id="page-availability">
+      <div class="card">
+        <div class="card-title">📅 Employee Availability Submissions</div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:20px">All availability submitted by your team members.</p>
+        <div id="avail-admin-list"></div>
+      </div>
+    </div>
+
     <!-- EMP DASHBOARD -->
     <div class="page" id="page-emp-dashboard">
       <div class="stats-grid">
@@ -544,7 +553,7 @@ function buildNav() {
   const nav=document.getElementById('snav'); nav.innerHTML='';
   const sections=isAdmin?[
     {s:'Overview',items:[{id:'dashboard',i:'📊',l:'Dashboard'}]},
-    {s:'Staff',items:[{id:'employees',i:'👥',l:'Employees'},{id:'schedule',i:'📅',l:'Schedule'}]},
+    {s:'Staff',items:[{id:'employees',i:'👥',l:'Employees'},{id:'schedule',i:'📅',l:'Schedule'},{id:'availability',i:'🗓️',l:'Availability'}]},
     {s:'Operations',items:[{id:'products',i:'📦',l:'Expiry Tracker'},{id:'orders',i:'🛒',l:'Order Planning'}]},
     {s:'Communication',items:[{id:'messages',i:'✉️',l:'Messages'}]}
   ]:[
@@ -582,6 +591,7 @@ function goTo(pid) {
     if(pid==='messages') renderMsgs();
     if(pid==='orders') renderOrds();
     if(pid==='emp-avail') renderAvail();
+    if(pid==='availability') renderAdminAvail();
     if(pid==='emp-dashboard') renderMySched();
     if(pid==='emp-msg') renderMyMsgs();
   } catch(e){ console.error('goTo error:',e); }
@@ -993,6 +1003,60 @@ async function saveAvail() {
     await db.collection('kfc_availability').doc(CU.uid).set({uid:CU.uid,name:CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email,availability:avail,updatedAt:FS.serverTimestamp()});
     toast('Availability saved!','success');
   } catch(e){ toast('Error: '+e.message,'error'); }
+}
+
+// ── ADMIN AVAILABILITY ──────────────────────────
+async function renderAdminAvail() {
+  const el = document.getElementById('avail-admin-list');
+  if (!el) return;
+  el.innerHTML = '<p style="color:var(--light);font-size:13px">Loading...</p>';
+  try {
+    const snap = await db.collection('kfc_availability').get();
+    if (snap.empty) {
+      el.innerHTML = '<div class="empty"><div class="ei">📭</div><p>No availability submitted yet.</p></div>';
+      return;
+    }
+    const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const dayShort = {'Monday':'Mon','Tuesday':'Tue','Wednesday':'Wed','Thursday':'Thu','Friday':'Fri','Saturday':'Sat','Sunday':'Sun'};
+    const dayColor = {'Monday':'var(--blue)','Tuesday':'var(--gold)','Wednesday':'var(--green)','Thursday':'var(--orange)','Friday':'var(--red)','Saturday':'#a855f7','Sunday':'#ec4899'};
+    let html = '';
+    snap.docs.forEach(doc => {
+      const data = doc.data();
+      const name = data.name || 'Unknown';
+      const avail = data.availability || {};
+      const updated = data.updatedAt?.toDate ? data.updatedAt.toDate().toLocaleDateString('en-CA') : '—';
+      const availDays = days.filter(d => avail[d]);
+      html += `
+        <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:18px 20px;margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:15px">${ini(name)}</div>
+              <div>
+                <div style="font-weight:600;font-size:15px;color:var(--white)">${name}</div>
+                <div style="font-size:11px;color:var(--light)">Updated: ${updated}</div>
+              </div>
+            </div>
+            <span class="badge b-green">${availDays.length} day${availDays.length!==1?'s':''} available</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${days.map(d => {
+              const isAvail = avail[d];
+              return `<div style="flex:1;min-width:70px;background:${isAvail?'rgba(34,197,94,.1)':'rgba(255,255,255,.03)'};border:1px solid ${isAvail?'rgba(34,197,94,.3)':'rgba(255,255,255,.06)'};border-radius:8px;padding:8px 6px;text-align:center">
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:${isAvail?dayColor[d]:'var(--mid)'}">${dayShort[d]}</div>
+                ${isAvail
+                  ? `<div style="font-size:10px;color:var(--green);margin-top:4px">✅</div><div style="font-size:10px;color:var(--light);margin-top:2px">${avail[d].from}–${avail[d].to}</div>`
+                  : `<div style="font-size:10px;color:var(--mid);margin-top:4px">✕</div>`
+                }
+              </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    });
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="empty"><div class="ei">⚠️</div><p>Error loading: ${e.message}</p></div>`;
+    console.error('renderAdminAvail:', e);
+  }
 }
 
 // ── EMP MESSAGES ────────────────────────────────
