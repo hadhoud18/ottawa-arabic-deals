@@ -380,106 +380,183 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <div id="toast-c"></div>
 
 <script>
-// ── FIREBASE ──────────────────────────────────────
+// ── FIREBASE INIT ────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyBdujq0sn6pQGZktiAyaeTntGlfQ8MYVP4",
   authDomain: "ottawa-deals.firebaseapp.com",
   projectId: "ottawa-deals",
   storageBucket: "ottawa-deals.firebasestorage.app",
   messagingSenderId: "468903353105",
-  appId: "1:468903353105:web:864ea92efea5c5c6bc0ab0",
-  measurementId: "G-L06FJJ1D5E"
+  appId: "1:468903353105:web:864ea92efea5c5c6bc0ab0"
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db   = firebase.firestore();
+const FS   = firebase.firestore.FieldValue;
 const ADMIN_EMAIL = 'bouhoula.hedi@kfc1416.com';
 
-// ── STATE ─────────────────────────────────────────
-let CU = null, CUD = null, isAdmin = false;
-let employees = [], schedData = {}, products = [], messages = [];
-let weekOff = 0, ordQty = {};
+// ── STATE ────────────────────────────────────────
+let CU=null, CUD=null, isAdmin=false;
+let employees=[], schedData={}, products=[], messages=[];
+let weekOff=0, ordQty={};
+let appBooted=false;
 
-// ── HELPERS ───────────────────────────────────────
+// ── HELPERS ──────────────────────────────────────
 function toast(msg, type='info') {
-  const c = document.getElementById('toast-c');
-  const t = document.createElement('div');
-  t.className = 'toast ' + type;
-  t.innerHTML = `<span>${{info:'ℹ️',success:'✅',error:'❌'}[type]||'ℹ️'}</span> ${msg}`;
+  const c=document.getElementById('toast-c');
+  const t=document.createElement('div');
+  t.className='toast '+type;
+  t.innerHTML=`<span>${{info:'ℹ️',success:'✅',error:'❌'}[type]||'ℹ️'}</span> ${msg}`;
   c.appendChild(t);
-  setTimeout(() => t.remove(), 4500);
+  setTimeout(()=>t.remove(), 4500);
 }
 const fd = d => d.toISOString().split('T')[0];
 function getWeekDays() {
-  const n = new Date(); n.setDate(n.getDate() + weekOff*7);
-  const diff = n.getDay()===0 ? -6 : 1-n.getDay();
-  const mon = new Date(n); mon.setDate(n.getDate()+diff);
+  const n=new Date(); n.setDate(n.getDate()+weekOff*7);
+  const diff=n.getDay()===0?-6:1-n.getDay();
+  const mon=new Date(n); mon.setDate(n.getDate()+diff);
   return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return d; });
 }
-function dl(s) { const n=new Date(); n.setHours(0,0,0,0); return Math.floor((new Date(s+'T00:00:00')-n)/86400000); }
-function exSt(d) { return d<0?'red':d<=3?'orange':'green'; }
-function ini(n) { return (n||'').split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?'; }
-function openM(id) { document.getElementById(id).classList.add('active'); }
-function closeM(id) { document.getElementById(id).classList.remove('active'); }
-document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('active'); }));
+function dl(s) {
+  const n=new Date(); n.setHours(0,0,0,0);
+  return Math.floor((new Date(s+'T00:00:00')-n)/86400000);
+}
+function exSt(d){ return d<0?'red':d<=3?'orange':'green'; }
+function ini(n){ return (n||'').split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2)||'?'; }
+function openM(id){ document.getElementById(id).classList.add('active'); }
+function closeM(id){ document.getElementById(id).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(m=>
+  m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('active'); })
+);
 
-// ── AUTH ──────────────────────────────────────────
+// ── BOOT / LOADING SCREEN ────────────────────────
+function bootDismiss() {
+  if(appBooted) return;
+  appBooted=true;
+  const ls=document.getElementById('loading-screen');
+  ls.style.opacity='0';
+  setTimeout(()=>{
+    ls.style.display='none';
+    if(!CU) document.getElementById('login-page').classList.add('active');
+  },500);
+}
+// Hard fallback — show login after 5s no matter what
+setTimeout(bootDismiss, 5000);
+
+// ── AUTH ─────────────────────────────────────────
 function doLogin() {
-  const email = document.getElementById('li-email').value.trim();
-  const pass  = document.getElementById('li-pass').value;
-  const err   = document.getElementById('login-error');
-  err.textContent = '';
-  if (!email||!pass) { err.textContent='Please enter your email and password.'; return; }
-  auth.signInWithEmailAndPassword(email, pass).catch(e => {
-    err.textContent = {'auth/user-not-found':'No account found.','auth/wrong-password':'Incorrect password.','auth/invalid-credential':'Invalid email or password.','auth/too-many-requests':'Too many attempts. Try again later.'}[e.code] || e.message;
-  });
+  const email=document.getElementById('li-email').value.trim();
+  const pass=document.getElementById('li-pass').value;
+  const err=document.getElementById('login-error');
+  err.textContent='';
+  if(!email||!pass){ err.textContent='Please enter your email and password.'; return; }
+  document.getElementById('li-email').disabled=true;
+  document.getElementById('li-pass').disabled=true;
+  auth.signInWithEmailAndPassword(email,pass)
+    .catch(e=>{
+      document.getElementById('li-email').disabled=false;
+      document.getElementById('li-pass').disabled=false;
+      err.textContent={
+        'auth/user-not-found':'No account found with this email.',
+        'auth/wrong-password':'Incorrect password.',
+        'auth/invalid-credential':'Invalid email or password.',
+        'auth/invalid-email':'Invalid email format.',
+        'auth/too-many-requests':'Too many attempts. Try again later.'
+      }[e.code]||('Error: '+e.message);
+    });
 }
 
 function doRegister() {
-  const first=document.getElementById('r-first').value.trim(), last=document.getElementById('r-last').value.trim();
-  const email=document.getElementById('r-email').value.trim(), pass=document.getElementById('r-pass').value;
-  const eid=document.getElementById('r-eid').value.trim(), role=document.getElementById('r-role').value;
-  const err=document.getElementById('r-err'); err.textContent='';
-  if (!first||!last||!email||!pass) { err.textContent='All fields required.'; return; }
-  if (pass.length<6) { err.textContent='Password must be 6+ characters.'; return; }
-  auth.createUserWithEmailAndPassword(email, pass).then(c =>
-    db.collection('users').doc(c.user.uid).set({firstName:first,lastName:last,email,employeeId:eid,role,isAdmin:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()})
-  ).then(() => { closeM('reg-modal'); toast('Account created! Sign in now.','success'); })
-  .catch(e => { err.textContent = e.message; });
+  const first=document.getElementById('r-first').value.trim();
+  const last=document.getElementById('r-last').value.trim();
+  const email=document.getElementById('r-email').value.trim();
+  const pass=document.getElementById('r-pass').value;
+  const eid=document.getElementById('r-eid').value.trim();
+  const role=document.getElementById('r-role').value;
+  const err=document.getElementById('r-err');
+  err.textContent='';
+  if(!first||!last||!email||!pass){ err.textContent='All fields required.'; return; }
+  if(pass.length<6){ err.textContent='Password must be 6+ characters.'; return; }
+  auth.createUserWithEmailAndPassword(email,pass)
+    .then(c=>db.collection('users').doc(c.user.uid).set({
+      firstName:first,lastName:last,email,employeeId:eid,role,
+      isAdmin:email===ADMIN_EMAIL,
+      createdAt:FS.serverTimestamp()
+    }))
+    .then(()=>{ closeM('reg-modal'); toast('Account created! Sign in now.','success'); })
+    .catch(e=>{ err.textContent=e.message; });
 }
 
-function doLogout() { auth.signOut(); }
+function doLogout(){ auth.signOut(); }
 
-// ── APP SHELL ─────────────────────────────────────
+auth.onAuthStateChanged(async user => {
+  try {
+    bootDismiss();
+    if(user) {
+      CU=user;
+      try {
+        const snap=await db.collection('users').doc(user.uid).get();
+        if(snap.exists) {
+          CUD=snap.data();
+          isAdmin=CUD.isAdmin===true||CUD.email===ADMIN_EMAIL;
+        } else {
+          isAdmin=user.email===ADMIN_EMAIL;
+          CUD=isAdmin
+            ?{firstName:'Mohamed Hedi',lastName:'Bouhoula',role:'Store Manager',isAdmin:true}
+            :{firstName:user.email.split('@')[0],lastName:'',role:'Employee',isAdmin:false};
+          await db.collection('users').doc(user.uid).set({...CUD,email:user.email,createdAt:FS.serverTimestamp()});
+        }
+      } catch(e){ console.warn('User profile error:',e); CUD={firstName:user.email.split('@')[0],lastName:'',role:'Employee',isAdmin:false}; isAdmin=user.email===ADMIN_EMAIL; }
+      await loadAll();
+      showApp();
+    } else {
+      CU=null; CUD=null; isAdmin=false;
+      document.getElementById('app').classList.remove('active');
+      document.getElementById('login-page').classList.add('active');
+      document.getElementById('li-email').disabled=false;
+      document.getElementById('li-pass').disabled=false;
+    }
+  } catch(e) {
+    console.error('Auth state error:',e);
+    bootDismiss();
+    document.getElementById('login-page').classList.add('active');
+  }
+});
+
+// ── APP SHELL ────────────────────────────────────
 function showApp() {
-  document.getElementById('login-page').classList.remove('active');
-  document.getElementById('app').classList.add('active');
-  const name = CUD ? `${CUD.firstName} ${CUD.lastName}`.trim() : CU.email;
-  document.getElementById('un').textContent = name;
-  document.getElementById('ua').textContent = ini(name);
-  const rb = document.getElementById('ur');
-  rb.textContent = isAdmin ? 'Store Manager' : (CUD?.role||'Employee');
-  rb.className = 'urole ' + (isAdmin?'urole-admin':'urole-emp');
-  document.getElementById('tdate').textContent = new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  buildNav();
-  goTo(isAdmin?'dashboard':'emp-dashboard');
+  try {
+    document.getElementById('login-page').classList.remove('active');
+    document.getElementById('app').classList.add('active');
+    const name=CUD?`${CUD.firstName||''} ${CUD.lastName||''}`.trim():CU.email;
+    document.getElementById('un').textContent=name;
+    document.getElementById('ua').textContent=ini(name);
+    const rb=document.getElementById('ur');
+    rb.textContent=isAdmin?'Store Manager':(CUD?.role||'Employee');
+    rb.className='urole '+(isAdmin?'urole-admin':'urole-emp');
+    document.getElementById('tdate').textContent=new Date().toLocaleDateString('en-CA',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+    buildNav();
+    goTo(isAdmin?'dashboard':'emp-dashboard');
+  } catch(e){ console.error('showApp error:',e); toast('Display error: '+e.message,'error'); }
 }
 
 function buildNav() {
-  const nav = document.getElementById('snav'); nav.innerHTML='';
-  const sections = isAdmin ? [
+  const nav=document.getElementById('snav'); nav.innerHTML='';
+  const sections=isAdmin?[
     {s:'Overview',items:[{id:'dashboard',i:'📊',l:'Dashboard'}]},
     {s:'Staff',items:[{id:'employees',i:'👥',l:'Employees'},{id:'schedule',i:'📅',l:'Schedule'}]},
     {s:'Operations',items:[{id:'products',i:'📦',l:'Expiry Tracker'},{id:'orders',i:'🛒',l:'Order Planning'}]},
     {s:'Communication',items:[{id:'messages',i:'✉️',l:'Messages'}]}
-  ] : [
+  ]:[
     {s:'My Work',items:[{id:'emp-dashboard',i:'🏠',l:'My Dashboard'},{id:'emp-avail',i:'📅',l:'My Availability'}]},
     {s:'Communication',items:[{id:'emp-msg',i:'✉️',l:'Message Manager'}]}
   ];
-  sections.forEach(sec => {
-    nav.innerHTML += `<div class="nav-section-label">${sec.s}</div>`;
-    sec.items.forEach(it => {
-      const b = document.createElement('button');
+  sections.forEach(sec=>{
+    const lbl=document.createElement('div');
+    lbl.className='nav-section-label'; lbl.textContent=sec.s;
+    nav.appendChild(lbl);
+    sec.items.forEach(it=>{
+      const b=document.createElement('button');
       b.className='nav-item'; b.id='nav-'+it.id;
       b.innerHTML=`<span class="icon">${it.i}</span>${it.l}`;
       b.onclick=()=>goTo(it.id);
@@ -489,30 +566,40 @@ function buildNav() {
 }
 
 function goTo(pid) {
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-  const p=document.getElementById('page-'+pid); if(p) p.classList.add('active');
-  const b=document.getElementById('nav-'+pid); if(b) b.classList.add('active');
-  document.getElementById('ptitle').textContent = {dashboard:'Dashboard',employees:'Employees',schedule:'Weekly Schedule',products:'Expiry Tracker',orders:'Order Planning',messages:'Messages','emp-dashboard':'My Dashboard','emp-avail':'My Availability','emp-msg':'Messages'}[pid]||'KFC';
-  if(pid==='schedule') renderSched();
-  if(pid==='employees') renderEmps();
-  if(pid==='products') renderProds();
-  if(pid==='messages') renderMsgs();
-  if(pid==='orders') renderOrds();
-  if(pid==='emp-avail') renderAvail();
-  if(pid==='emp-dashboard') renderMySched();
-  if(pid==='emp-msg') renderMyMsgs();
+  try {
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+    const p=document.getElementById('page-'+pid); if(p) p.classList.add('active');
+    const b=document.getElementById('nav-'+pid); if(b) b.classList.add('active');
+    document.getElementById('ptitle').textContent={
+      dashboard:'Dashboard',employees:'Employees',schedule:'Weekly Schedule',
+      products:'Expiry Tracker',orders:'Order Planning',messages:'Messages',
+      'emp-dashboard':'My Dashboard','emp-avail':'My Availability','emp-msg':'Messages'
+    }[pid]||'KFC';
+    if(pid==='schedule') renderSched();
+    if(pid==='employees') renderEmps();
+    if(pid==='products') renderProds();
+    if(pid==='messages') renderMsgs();
+    if(pid==='orders') renderOrds();
+    if(pid==='emp-avail') renderAvail();
+    if(pid==='emp-dashboard') renderMySched();
+    if(pid==='emp-msg') renderMyMsgs();
+  } catch(e){ console.error('goTo error:',e); }
 }
 
-// ── DATA LOAD ─────────────────────────────────────
+// ── DATA LOAD ────────────────────────────────────
 async function loadAll() {
-  await Promise.all([loadEmps(), loadSched(), loadProds(), loadMsgs()]);
+  try { await loadEmps(); } catch(e){ console.warn('loadEmps:',e); employees=[]; }
+  try { await loadSched(); } catch(e){ console.warn('loadSched:',e); schedData={}; }
+  try { await loadProds(); } catch(e){ console.warn('loadProds:',e); products=[]; }
+  try { await loadMsgs(); } catch(e){ console.warn('loadMsgs:',e); messages=[]; }
+  if(isAdmin) renderDash();
 }
 
 async function loadEmps() {
-  const snap = await db.collection('kfc_employees').get();
-  employees = snap.docs.map(d=>({id:d.id,...d.data()}));
-  if (!employees.length) await seedEmps();
+  const snap=await db.collection('kfc_employees').get();
+  employees=snap.docs.map(d=>({id:d.id,...d.data()}));
+  if(!employees.length) await seedEmps();
 }
 
 async function seedEmps() {
@@ -537,76 +624,86 @@ async function seedEmps() {
     {lastName:'Singh',firstName:'Jasmeet',employeeId:'60007859',site:'1408',role:'Shift Manager',rate:18.60},
     {lastName:'Tiwari',firstName:'Balveer',employeeId:'60011402',site:'1420',role:'Shift Manager',rate:18.60}
   ];
-  for (const e of seed) await db.collection('kfc_employees').add({...e,hasAccount:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-  const s = await db.collection('kfc_employees').get();
-  employees = s.docs.map(d=>({id:d.id,...d.data()}));
-  toast('Staff roster loaded from PDF records.','info');
+  for(const e of seed){
+    try{ await db.collection('kfc_employees').add({...e,hasAccount:false,createdAt:FS.serverTimestamp()}); }catch(er){console.warn('seed err',er);}
+  }
+  const s=await db.collection('kfc_employees').get();
+  employees=s.docs.map(d=>({id:d.id,...d.data()}));
+  toast('Staff roster loaded from store records.','info');
 }
 
 async function loadSched() {
-  const snap = await db.collection('kfc_schedule').get();
+  const snap=await db.collection('kfc_schedule').get();
   schedData={};
   snap.docs.forEach(d=>{ const dt=d.data(); if(!schedData[dt.date]) schedData[dt.date]=[]; schedData[dt.date].push({id:d.id,...dt}); });
 }
 
 async function loadProds() {
-  const snap = await db.collection('kfc_products').get();
-  products = snap.docs.map(d=>({id:d.id,...d.data()}));
+  const snap=await db.collection('kfc_products').get();
+  products=snap.docs.map(d=>({id:d.id,...d.data()}));
 }
 
 async function loadMsgs() {
   try {
-    const snap = await db.collection('kfc_messages').orderBy('createdAt','desc').get();
-    messages = snap.docs.map(d=>({id:d.id,...d.data()}));
-  } catch { messages=[]; }
+    const snap=await db.collection('kfc_messages').orderBy('createdAt','desc').get();
+    messages=snap.docs.map(d=>({id:d.id,...d.data()}));
+  } catch {
+    const snap=await db.collection('kfc_messages').get();
+    messages=snap.docs.map(d=>({id:d.id,...d.data()}));
+  }
 }
 
-// ── DASHBOARD ─────────────────────────────────────
+// ── DASHBOARD ────────────────────────────────────
 function renderDash() {
-  document.getElementById('s-emp').textContent = employees.length;
-  let sh=0; getWeekDays().forEach(d=>sh+=(schedData[fd(d)]||[]).length);
-  document.getElementById('s-shifts').textContent=sh;
-  document.getElementById('s-exp').textContent=products.filter(p=>dl(p.expiry)<=3&&dl(p.expiry)>=0).length;
-  document.getElementById('s-msg').textContent=messages.filter(m=>!m.read).length;
-  const crit=products.filter(p=>dl(p.expiry)<=3);
-  document.getElementById('dash-alerts').innerHTML=crit.length?crit.map(p=>`<div class="alert-b"><span class="edot e-${exSt(dl(p.expiry))}"></span><strong>${p.name}</strong>: ${dl(p.expiry)<0?'⛔ EXPIRED':`⚠️ ${dl(p.expiry)} day(s) left`} (${p.category})</div>`).join('')
-    :`<div class="empty"><div class="ei">✅</div><p>No urgent alerts</p></div>`;
-  const tod=schedData[fd(new Date())]||[];
-  document.getElementById('dash-today').innerHTML=tod.length?`<table style="width:100%;font-size:13px"><thead><tr><th>Employee</th><th>Role</th><th>Hours</th></tr></thead><tbody>${tod.map(s=>`<tr><td>${s.empName||'—'}</td><td>${s.role}</td><td>${s.start}–${s.end}</td></tr>`).join('')}</tbody></table>`
-    :`<p style="color:var(--light);font-size:13px">No shifts scheduled for today.</p>`;
+  try {
+    document.getElementById('s-emp').textContent=employees.length;
+    let sh=0; getWeekDays().forEach(d=>sh+=(schedData[fd(d)]||[]).length);
+    document.getElementById('s-shifts').textContent=sh;
+    document.getElementById('s-exp').textContent=products.filter(p=>dl(p.expiry)<=3&&dl(p.expiry)>=0).length;
+    document.getElementById('s-msg').textContent=messages.filter(m=>!m.read).length;
+    const crit=products.filter(p=>dl(p.expiry)<=3);
+    document.getElementById('dash-alerts').innerHTML=crit.length
+      ?crit.map(p=>`<div class="alert-b"><span class="edot e-${exSt(dl(p.expiry))}"></span><strong>${p.name}</strong>: ${dl(p.expiry)<0?'⛔ EXPIRED':`⚠️ ${dl(p.expiry)} day(s) left`} (${p.category||''})</div>`).join('')
+      :`<div class="empty"><div class="ei">✅</div><p>No urgent alerts</p></div>`;
+    const tod=schedData[fd(new Date())]||[];
+    document.getElementById('dash-today').innerHTML=tod.length
+      ?`<table style="width:100%;font-size:13px"><thead><tr><th>Employee</th><th>Role</th><th>Hours</th></tr></thead><tbody>${tod.map(s=>`<tr><td>${s.empName||'—'}</td><td>${s.role}</td><td>${s.start}–${s.end}</td></tr>`).join('')}</tbody></table>`
+      :`<p style="color:var(--light);font-size:13px">No shifts scheduled for today.</p>`;
+  } catch(e){ console.error('renderDash:',e); }
 }
 
-// ── EMPLOYEES ─────────────────────────────────────
+// ── EMPLOYEES ────────────────────────────────────
 function renderEmps() {
-  const search=(document.getElementById('es').value||'').toLowerCase();
-  const fRole=document.getElementById('ef').value;
-  const filtered=employees.filter(e=>`${e.firstName} ${e.lastName}`.toLowerCase().includes(search)&&(!fRole||e.role===fRole));
-  const rc={'Shift Manager':'b-red','Cook':'b-gold','Team Member':'b-blue','Assistant General Manager':'b-green'};
-  document.getElementById('emp-tbody').innerHTML=filtered.length?filtered.map(e=>`
-    <tr>
-      <td><strong>${e.lastName}, ${e.firstName}</strong></td>
-      <td style="font-family:'Barlow Condensed',sans-serif;color:var(--light)">${e.employeeId||'—'}</td>
-      <td>${e.site||'—'}</td>
-      <td><span class="badge ${rc[e.role]||'b-blue'}">${e.role}</span></td>
-      <td>$${parseFloat(e.rate||0).toFixed(2)}</td>
-      <td>${e.hasAccount
-        ? `<span class="badge b-green">✅ Active</span>${e.accountEmail?`<br><span style="font-size:11px;color:var(--light)">${e.accountEmail}</span>`:''}`
-        : `<button class="btn btn-w btn-sm" onclick="openCre('${e.id}')">🔑 Create Account</button>`
-      }</td>
-      <td><div class="ac">
-        <button class="btn btn-g btn-sm" onclick="openEdit('${e.id}')">✏️</button>
-        <button class="btn btn-d btn-sm" onclick="delEmp('${e.id}')">🗑️</button>
-      </div></td>
-    </tr>`).join('')
-    :`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--mid)">No employees found</td></tr>`;
+  try {
+    const search=(document.getElementById('es').value||'').toLowerCase();
+    const fRole=document.getElementById('ef').value;
+    const filtered=employees.filter(e=>`${e.firstName||''} ${e.lastName||''}`.toLowerCase().includes(search)&&(!fRole||e.role===fRole));
+    const rc={'Shift Manager':'b-red','Cook':'b-gold','Team Member':'b-blue','Assistant General Manager':'b-green'};
+    document.getElementById('emp-tbody').innerHTML=filtered.length
+      ?filtered.map(e=>`<tr>
+        <td><strong>${e.lastName||''}, ${e.firstName||''}</strong></td>
+        <td style="font-family:'Barlow Condensed',sans-serif;color:var(--light)">${e.employeeId||'—'}</td>
+        <td>${e.site||'—'}</td>
+        <td><span class="badge ${rc[e.role]||'b-blue'}">${e.role||'—'}</span></td>
+        <td>$${parseFloat(e.rate||0).toFixed(2)}</td>
+        <td>${e.hasAccount
+          ?`<span class="badge b-green">✅ Active</span>${e.accountEmail?`<br><span style="font-size:11px;color:var(--light)">${e.accountEmail}</span>`:''}`
+          :`<button class="btn btn-w btn-sm" onclick="openCre('${e.id}')">🔑 Create Account</button>`
+        }</td>
+        <td><div class="ac">
+          <button class="btn btn-g btn-sm" onclick="openEdit('${e.id}')">✏️</button>
+          <button class="btn btn-d btn-sm" onclick="delEmp('${e.id}')">🗑️</button>
+        </div></td>
+      </tr>`).join('')
+      :`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--mid)">No employees found</td></tr>`;
+  } catch(e){ console.error('renderEmps:',e); }
 }
 
-// ── CREATE ACCOUNT ────────────────────────────────
 function openCre(eid) {
   const e=employees.find(x=>x.id===eid); if(!e) return;
   document.getElementById('cre-eid').value=eid;
   document.getElementById('cre-info').innerHTML=`👤 <strong>${e.firstName} ${e.lastName}</strong> · ${e.role} · ID: ${e.employeeId||'—'}`;
-  document.getElementById('cre-email').value=`${e.firstName.toLowerCase().replace(/\s+/g,'.')}.${e.lastName.toLowerCase().replace(/[^a-z]/g,'')}@kfc1416.com`;
+  document.getElementById('cre-email').value=`${(e.firstName||'').toLowerCase().replace(/\s+/g,'.')}.${(e.lastName||'').toLowerCase().replace(/[^a-z]/g,'')}@kfc1416.com`;
   document.getElementById('cre-pass').value='KFC1416!';
   document.getElementById('cre-err').textContent='';
   openM('cre-modal');
@@ -617,28 +714,23 @@ async function createAccForEmp() {
   const email=document.getElementById('cre-email').value.trim();
   const pass=document.getElementById('cre-pass').value;
   const errEl=document.getElementById('cre-err'); errEl.textContent='';
-  if (!email||!pass) { errEl.textContent='Email and password are required.'; return; }
-  if (pass.length<6) { errEl.textContent='Password must be at least 6 characters.'; return; }
+  if(!email||!pass){ errEl.textContent='Email and password required.'; return; }
+  if(pass.length<6){ errEl.textContent='Password must be 6+ characters.'; return; }
   const e=employees.find(x=>x.id===eid); if(!e) return;
-  // Use secondary app to avoid signing out admin
   let secApp;
-  try { secApp=firebase.app('sec'); } catch { secApp=firebase.initializeApp(firebaseConfig,'sec'); }
+  try{ secApp=firebase.app('sec'); }catch{ secApp=firebase.initializeApp(firebaseConfig,'sec'); }
   const secAuth=secApp.auth();
   try {
     const cred=await secAuth.createUserWithEmailAndPassword(email,pass);
-    await db.collection('users').doc(cred.user.uid).set({
-      firstName:e.firstName, lastName:e.lastName, email, employeeId:e.employeeId||'',
-      role:e.role, isAdmin:false, createdAt:firebase.firestore.FieldValue.serverTimestamp()
-    });
+    await db.collection('users').doc(cred.user.uid).set({firstName:e.firstName,lastName:e.lastName,email,employeeId:e.employeeId||'',role:e.role,isAdmin:false,createdAt:FS.serverTimestamp()});
     await db.collection('kfc_employees').doc(eid).update({hasAccount:true,accountEmail:email});
     const idx=employees.findIndex(x=>x.id===eid);
-    if(idx>-1){employees[idx].hasAccount=true; employees[idx].accountEmail=email;}
+    if(idx>-1){employees[idx].hasAccount=true;employees[idx].accountEmail=email;}
     await secAuth.signOut();
-    closeM('cre-modal');
-    renderEmps();
-    toast(`✅ Account created for ${e.firstName} ${e.lastName}  —  ${email}`,'success');
-  } catch(err) {
-    errEl.textContent={'auth/email-already-in-use':'This email is already registered.','auth/invalid-email':'Invalid email.','auth/weak-password':'Password must be 6+ characters.'}[err.code]||err.message;
+    closeM('cre-modal'); renderEmps();
+    toast(`✅ Account created — ${email}`,'success');
+  } catch(err){
+    errEl.textContent={'auth/email-already-in-use':'Email already registered.','auth/invalid-email':'Invalid email.','auth/weak-password':'Password too short.'}[err.code]||err.message;
   }
 }
 
@@ -655,129 +747,150 @@ function openEdit(id) {
 }
 
 async function saveEditEmp() {
-  const id=document.getElementById('ee-id').value;
-  const upd={firstName:document.getElementById('ee-first').value.trim(),lastName:document.getElementById('ee-last').value.trim(),employeeId:document.getElementById('ee-eid').value.trim(),site:document.getElementById('ee-site').value.trim(),role:document.getElementById('ee-role').value,rate:parseFloat(document.getElementById('ee-rate').value)};
-  await db.collection('kfc_employees').doc(id).update(upd);
-  const i=employees.findIndex(x=>x.id===id); if(i>-1) employees[i]={...employees[i],...upd};
-  closeM('edit-emp-modal'); renderEmps(); toast('Employee updated.','success');
+  try {
+    const id=document.getElementById('ee-id').value;
+    const upd={firstName:document.getElementById('ee-first').value.trim(),lastName:document.getElementById('ee-last').value.trim(),employeeId:document.getElementById('ee-eid').value.trim(),site:document.getElementById('ee-site').value.trim(),role:document.getElementById('ee-role').value,rate:parseFloat(document.getElementById('ee-rate').value)};
+    await db.collection('kfc_employees').doc(id).update(upd);
+    const i=employees.findIndex(x=>x.id===id); if(i>-1) employees[i]={...employees[i],...upd};
+    closeM('edit-emp-modal'); renderEmps(); toast('Employee updated.','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 async function delEmp(id) {
   if(!confirm('Remove this employee?')) return;
-  await db.collection('kfc_employees').doc(id).delete();
-  employees=employees.filter(x=>x.id!==id); renderEmps(); toast('Removed.','success');
+  try {
+    await db.collection('kfc_employees').doc(id).delete();
+    employees=employees.filter(x=>x.id!==id); renderEmps(); toast('Removed.','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 async function addEmp() {
-  const d={firstName:document.getElementById('ae-first').value.trim(),lastName:document.getElementById('ae-last').value.trim(),employeeId:document.getElementById('ae-eid').value.trim(),site:document.getElementById('ae-site').value.trim(),role:document.getElementById('ae-role').value,rate:parseFloat(document.getElementById('ae-rate').value),hasAccount:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
-  if(!d.firstName||!d.lastName){toast('Name required.','error');return;}
-  const ref=await db.collection('kfc_employees').add(d);
-  employees.push({id:ref.id,...d}); closeM('add-emp-modal'); renderEmps(); toast('Employee added.','success');
+  try {
+    const d={firstName:document.getElementById('ae-first').value.trim(),lastName:document.getElementById('ae-last').value.trim(),employeeId:document.getElementById('ae-eid').value.trim(),site:document.getElementById('ae-site').value.trim(),role:document.getElementById('ae-role').value,rate:parseFloat(document.getElementById('ae-rate').value)||17.60,hasAccount:false,createdAt:FS.serverTimestamp()};
+    if(!d.firstName||!d.lastName){ toast('Name required.','error'); return; }
+    const ref=await db.collection('kfc_employees').add(d);
+    employees.push({id:ref.id,...d}); closeM('add-emp-modal'); renderEmps(); toast('Employee added.','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
-// ── SCHEDULE ──────────────────────────────────────
+// ── SCHEDULE ────────────────────────────────────
 function renderSched() {
-  const days=getWeekDays(), DN=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  document.getElementById('wklabel').textContent=days[0].toLocaleDateString('en-CA',{month:'short',day:'numeric'})+' – '+days[6].toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'});
-  const g=document.getElementById('wgrid'); g.innerHTML='';
-  const tod=fd(new Date());
-  days.forEach((d,i)=>{
-    const ds=fd(d), sh=schedData[ds]||[], isT=ds===tod;
-    const col=document.createElement('div'); col.className='day-col';
-    if(isT) col.style.borderTop='2px solid var(--red)';
-    col.innerHTML=`<div class="day-header"><div class="day-name" style="color:${isT?'var(--red)':'var(--white)'}">${DN[i]}</div><div style="font-size:11px;color:var(--light)">${d.getDate()}</div></div>
-    ${sh.length?sh.map(s=>`<div class="shift-slot"><div class="shift-time">${s.start}–${s.end}</div><div class="shift-emp">${s.empName||'—'}</div><div style="display:flex;justify-content:space-between;align-items:center"><div class="shift-role">${s.role}</div><button style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:10px" onclick="delShift('${s.id}','${ds}')">✕</button></div></div>`).join(''):`<div style="padding:8px;text-align:center;font-size:10px;color:var(--mid)">No shifts</div>`}
-    <button class="btn-add-shift" onclick="openAddShift('${ds}','${DN[i]}')">+ Add Shift</button>`;
-    g.appendChild(col);
-  });
-  // Validate
-  const issues=[];
-  days.forEach(d=>{ const sh=schedData[fd(d)]||[]; if(sh.length){const dn=d.toLocaleDateString('en-CA',{weekday:'short'}); if(!sh.find(s=>s.role==='Shift Manager')) issues.push(`${dn}: No Manager`); if(!sh.find(s=>s.role==='Cook')) issues.push(`${dn}: No Cook`); }});
-  document.getElementById('sched-val').innerHTML=issues.length?`<div class="alert-b">⚠️ <div>${issues.join(' &nbsp;|&nbsp; ')}</div></div>`:'';
+  try {
+    const days=getWeekDays(), DN=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    document.getElementById('wklabel').textContent=days[0].toLocaleDateString('en-CA',{month:'short',day:'numeric'})+' – '+days[6].toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'});
+    const g=document.getElementById('wgrid'); g.innerHTML='';
+    const tod=fd(new Date());
+    days.forEach((d,i)=>{
+      const ds=fd(d), sh=schedData[ds]||[], isT=ds===tod;
+      const col=document.createElement('div'); col.className='day-col';
+      if(isT) col.style.borderTop='2px solid var(--red)';
+      col.innerHTML=`<div class="day-header"><div class="day-name" style="color:${isT?'var(--red)':'var(--white)'}">${DN[i]}</div><div style="font-size:11px;color:var(--light)">${d.getDate()}</div></div>
+      ${sh.length?sh.map(s=>`<div class="shift-slot"><div class="shift-time">${s.start}–${s.end}</div><div class="shift-emp">${s.empName||'—'}</div><div style="display:flex;justify-content:space-between;align-items:center"><div class="shift-role">${s.role}</div><button style="background:none;border:none;color:var(--mid);cursor:pointer;font-size:10px" onclick="delShift('${s.id}','${ds}')">✕</button></div></div>`).join(''):`<div style="padding:8px;text-align:center;font-size:10px;color:var(--mid)">No shifts</div>`}
+      <button class="btn-add-shift" onclick="openAddShift('${ds}','${DN[i]}')">+ Add Shift</button>`;
+      g.appendChild(col);
+    });
+    const issues=[];
+    days.forEach(d=>{ const sh=schedData[fd(d)]||[]; if(sh.length){ const dn=d.toLocaleDateString('en-CA',{weekday:'short'}); if(!sh.find(s=>s.role==='Shift Manager')) issues.push(`${dn}: No Manager`); if(!sh.find(s=>s.role==='Cook')) issues.push(`${dn}: No Cook`); }});
+    document.getElementById('sched-val').innerHTML=issues.length?`<div class="alert-b">⚠️ <div>${issues.join(' &nbsp;|&nbsp; ')}</div></div>`:'';
+  } catch(e){ console.error('renderSched:',e); }
 }
 
-function prevWeek(){weekOff--;renderSched();}
-function nextWeek(){weekOff++;renderSched();}
+function prevWeek(){ weekOff--; renderSched(); }
+function nextWeek(){ weekOff++; renderSched(); }
 
 function openAddShift(ds,dn) {
   document.getElementById('ast-date').value=ds;
   document.getElementById('ast-title').textContent=`➕ Shift — ${dn} ${ds}`;
-  document.getElementById('ast-emp').innerHTML=employees.map(e=>`<option value="${e.id}">${e.lastName}, ${e.firstName}</option>`).join('');
+  document.getElementById('ast-emp').innerHTML=employees.map(e=>`<option value="${e.id}">${e.lastName||''}, ${e.firstName||''}</option>`).join('');
   openM('add-shift-modal');
 }
 
 async function saveShift() {
-  const ds=document.getElementById('ast-date').value, eid=document.getElementById('ast-emp').value;
-  const emp=employees.find(x=>x.id===eid);
-  const data={date:ds,empId:eid,empName:emp?`${emp.firstName} ${emp.lastName}`:'?',role:document.getElementById('ast-role').value,start:document.getElementById('ast-start').value,end:document.getElementById('ast-end').value,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
-  const ref=await db.collection('kfc_schedule').add(data);
-  if(!schedData[ds]) schedData[ds]=[];
-  schedData[ds].push({id:ref.id,...data});
-  closeM('add-shift-modal'); renderSched(); toast('Shift added.','success');
+  try {
+    const ds=document.getElementById('ast-date').value, eid=document.getElementById('ast-emp').value;
+    const emp=employees.find(x=>x.id===eid);
+    const data={date:ds,empId:eid,empName:emp?`${emp.firstName} ${emp.lastName}`:'?',role:document.getElementById('ast-role').value,start:document.getElementById('ast-start').value,end:document.getElementById('ast-end').value,createdAt:FS.serverTimestamp()};
+    const ref=await db.collection('kfc_schedule').add(data);
+    if(!schedData[ds]) schedData[ds]=[];
+    schedData[ds].push({id:ref.id,...data});
+    closeM('add-shift-modal'); renderSched(); toast('Shift added.','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 async function delShift(sid,ds) {
-  await db.collection('kfc_schedule').doc(sid).delete();
-  if(schedData[ds]) schedData[ds]=schedData[ds].filter(s=>s.id!==sid);
-  renderSched(); toast('Shift removed.','success');
+  try {
+    await db.collection('kfc_schedule').doc(sid).delete();
+    if(schedData[ds]) schedData[ds]=schedData[ds].filter(s=>s.id!==sid);
+    renderSched(); toast('Shift removed.','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 async function autoSchedule() {
-  const days=getWeekDays();
-  const mgrs=employees.filter(e=>e.role==='Shift Manager');
-  const cooks=employees.filter(e=>e.role==='Cook'||e.role.includes('Food'));
-  const tms=employees.filter(e=>e.role==='Team Member');
-  if(!mgrs.length||!cooks.length){toast('Need Shift Manager + Cook.','error');return;}
-  let added=0;
-  for(const d of days){
-    const ds=fd(d);
-    if((schedData[ds]||[]).length) continue;
-    const m=[...mgrs].sort(()=>Math.random()-.5), c=[...cooks].sort(()=>Math.random()-.5), t=[...tms].sort(()=>Math.random()-.5);
-    const busy=[2,4,5,6].includes(d.getDay());
-    const shifts=[
-      {empId:m[0].id,empName:`${m[0].firstName} ${m[0].lastName}`,role:'Shift Manager',start:'09:30',end:'17:00'},
-      {empId:c[0].id,empName:`${c[0].firstName} ${c[0].lastName}`,role:'Cook',start:'09:30',end:'17:00'},
-      ...(t[0]?[{empId:t[0].id,empName:`${t[0].firstName} ${t[0].lastName}`,role:'Team Member',start:'10:00',end:'18:00'}]:[]),
-      {empId:(m[1]||m[0]).id,empName:`${(m[1]||m[0]).firstName} ${(m[1]||m[0]).lastName}`,role:'Shift Manager',start:'17:00',end:'23:30'},
-      {empId:(c[1]||c[0]).id,empName:`${(c[1]||c[0]).firstName} ${(c[1]||c[0]).lastName}`,role:'Cook',start:'17:00',end:'23:30'},
-      ...(t[1]?[{empId:t[1].id,empName:`${t[1].firstName} ${t[1].lastName}`,role:'Team Member',start:'17:00',end:'23:30'}]:[]),
-      ...(busy&&t[2]?[{empId:t[2].id,empName:`${t[2].firstName} ${t[2].lastName}`,role:'Team Member',start:'12:00',end:'20:00'}]:[])
-    ];
-    schedData[ds]=[];
-    for(const s of shifts){
-      const data={date:ds,...s,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
-      const ref=await db.collection('kfc_schedule').add(data);
-      schedData[ds].push({id:ref.id,...data}); added++;
+  try {
+    const days=getWeekDays();
+    const mgrs=employees.filter(e=>e.role==='Shift Manager');
+    const cooks=employees.filter(e=>e.role==='Cook'||e.role.includes('Food'));
+    const tms=employees.filter(e=>e.role==='Team Member');
+    if(!mgrs.length||!cooks.length){ toast('Need at least 1 Shift Manager and 1 Cook.','error'); return; }
+    let added=0;
+    for(const d of days){
+      const ds=fd(d);
+      if((schedData[ds]||[]).length) continue;
+      const m=[...mgrs].sort(()=>Math.random()-.5);
+      const c=[...cooks].sort(()=>Math.random()-.5);
+      const t=[...tms].sort(()=>Math.random()-.5);
+      const busy=[2,4,5,6].includes(d.getDay());
+      const shifts=[
+        {empId:m[0].id,empName:`${m[0].firstName} ${m[0].lastName}`,role:'Shift Manager',start:'09:30',end:'17:00'},
+        {empId:c[0].id,empName:`${c[0].firstName} ${c[0].lastName}`,role:'Cook',start:'09:30',end:'17:00'},
+        ...(t[0]?[{empId:t[0].id,empName:`${t[0].firstName} ${t[0].lastName}`,role:'Team Member',start:'10:00',end:'18:00'}]:[]),
+        {empId:(m[1]||m[0]).id,empName:`${(m[1]||m[0]).firstName} ${(m[1]||m[0]).lastName}`,role:'Shift Manager',start:'17:00',end:'23:30'},
+        {empId:(c[1]||c[0]).id,empName:`${(c[1]||c[0]).firstName} ${(c[1]||c[0]).lastName}`,role:'Cook',start:'17:00',end:'23:30'},
+        ...(t[1]?[{empId:t[1].id,empName:`${t[1].firstName} ${t[1].lastName}`,role:'Team Member',start:'17:00',end:'23:30'}]:[]),
+        ...(busy&&t[2]?[{empId:t[2].id,empName:`${t[2].firstName} ${t[2].lastName}`,role:'Team Member',start:'12:00',end:'20:00'}]:[])
+      ];
+      schedData[ds]=[];
+      for(const s of shifts){
+        const data={date:ds,...s,createdAt:FS.serverTimestamp()};
+        const ref=await db.collection('kfc_schedule').add(data);
+        schedData[ds].push({id:ref.id,...data}); added++;
+      }
     }
-  }
-  renderSched(); toast(`Done — ${added} shifts added.`,'success');
+    renderSched(); toast(`Done — ${added} shifts added.`,'success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
-// ── PRODUCTS ──────────────────────────────────────
+// ── PRODUCTS ────────────────────────────────────
 function renderProds() {
-  const s=(document.getElementById('ps').value||'').toLowerCase();
-  const f=products.filter(p=>(p.name||'').toLowerCase().includes(s)).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));
-  document.getElementById('prod-alerts').innerHTML=products.filter(p=>dl(p.expiry)<=3).map(p=>`<div class="alert-b"><span class="edot e-${exSt(dl(p.expiry))}"></span><strong>${p.name}</strong>: ${dl(p.expiry)<0?'⛔ EXPIRED':`⚠️ ${dl(p.expiry)}d left`}</div>`).join('');
-  document.getElementById('prod-tbody').innerHTML=f.length?f.map(p=>{
-    const d=dl(p.expiry),st=exSt(d),col=st==='red'?'var(--red)':st==='orange'?'var(--orange)':'var(--green)';
-    return `<tr><td><span class="edot e-${st}"></span></td><td><strong>${p.name}</strong></td><td><span class="badge b-blue">${p.category||'—'}</span></td><td>${p.qty||1}</td><td>${p.expiry}</td><td style="color:${col};font-weight:600">${d<0?'EXPIRED':d+'d'}</td><td><button class="btn btn-d btn-sm" onclick="delProd('${p.id}')">🗑️</button></td></tr>`;
-  }).join(''):`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--mid)">No products. Click ➕ Add Product.</td></tr>`;
+  try {
+    const s=(document.getElementById('ps').value||'').toLowerCase();
+    const f=products.filter(p=>(p.name||'').toLowerCase().includes(s)).sort((a,b)=>new Date(a.expiry)-new Date(b.expiry));
+    document.getElementById('prod-alerts').innerHTML=products.filter(p=>dl(p.expiry)<=3).map(p=>`<div class="alert-b"><span class="edot e-${exSt(dl(p.expiry))}"></span><strong>${p.name}</strong>: ${dl(p.expiry)<0?'⛔ EXPIRED':`⚠️ ${dl(p.expiry)}d left`}</div>`).join('');
+    document.getElementById('prod-tbody').innerHTML=f.length?f.map(p=>{
+      const d=dl(p.expiry),st=exSt(d),col=st==='red'?'var(--red)':st==='orange'?'var(--orange)':'var(--green)';
+      return `<tr><td><span class="edot e-${st}"></span></td><td><strong>${p.name||'—'}</strong></td><td><span class="badge b-blue">${p.category||'—'}</span></td><td>${p.qty||1}</td><td>${p.expiry||'—'}</td><td style="color:${col};font-weight:600">${d<0?'EXPIRED':d+'d'}</td><td><button class="btn btn-d btn-sm" onclick="delProd('${p.id}')">🗑️</button></td></tr>`;
+    }).join(''):`<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--mid)">No products yet.</td></tr>`;
+  } catch(e){ console.error('renderProds:',e); }
 }
 
 async function addProduct() {
-  const data={name:document.getElementById('ap-name').value.trim(),expiry:document.getElementById('ap-exp').value,qty:parseInt(document.getElementById('ap-qty').value)||1,category:document.getElementById('ap-cat').value,createdAt:firebase.firestore.FieldValue.serverTimestamp()};
-  if(!data.name||!data.expiry){toast('Name and expiry required.','error');return;}
-  const ref=await db.collection('kfc_products').add(data);
-  products.push({id:ref.id,...data}); closeM('add-prod-modal'); renderProds(); renderDash(); toast('Product added.','success');
+  try {
+    const data={name:document.getElementById('ap-name').value.trim(),expiry:document.getElementById('ap-exp').value,qty:parseInt(document.getElementById('ap-qty').value)||1,category:document.getElementById('ap-cat').value,createdAt:FS.serverTimestamp()};
+    if(!data.name||!data.expiry){ toast('Name and expiry required.','error'); return; }
+    const ref=await db.collection('kfc_products').add(data);
+    products.push({id:ref.id,...data}); closeM('add-prod-modal'); renderProds(); renderDash(); toast('Product added.','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 async function delProd(id) {
   if(!confirm('Remove product?')) return;
-  await db.collection('kfc_products').doc(id).delete();
-  products=products.filter(x=>x.id!==id); renderProds(); toast('Removed.','success');
+  try {
+    await db.collection('kfc_products').doc(id).delete();
+    products=products.filter(x=>x.id!==id); renderProds(); toast('Removed.','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
-// ── ORDERS ────────────────────────────────────────
+// ── ORDERS ──────────────────────────────────────
 const ORDS=[
   {n:'Whole Chicken',u:'case',b:10},{n:'Chicken Breast',u:'case',b:8},{n:'Chicken Wings',u:'case',b:6},
   {n:'Chicken Tenders',u:'case',b:5},{n:'Coleslaw Mix',u:'bag',b:4},{n:'Frying Oil',u:'jug',b:3},
@@ -786,98 +899,111 @@ const ORDS=[
 ];
 
 function renderOrds() {
-  const dow=new Date().getDay();
-  document.getElementById('ord-info').innerHTML=`<div class="alert-b">📅 ${dow===2?'Today is Tuesday — covers Wed–Fri':dow===5?'Today is Friday — covers Sat–Tue':'Order days: Tuesday & Friday'}</div>`;
-  if(!Object.keys(ordQty).length) ORDS.forEach(o=>ordQty[o.n]=o.b);
-  document.getElementById('ord-list').innerHTML=ORDS.map(o=>`
-    <div class="order-item">
-      <div><div style="font-weight:500;color:var(--lighter)">${o.n}</div><div style="font-size:11px;color:var(--light)">${o.u}</div></div>
-      <div class="oqty">
-        <button class="qbtn" onclick="adjQ('${o.n}',-1)">−</button>
-        <div style="min-width:32px;text-align:center;font-weight:600" id="oq-${o.n.replace(/\W/g,'-')}">${ordQty[o.n]}</div>
-        <button class="qbtn" onclick="adjQ('${o.n}',1)">+</button>
-      </div>
-    </div>`).join('');
-  loadPrevOrds();
+  try {
+    const dow=new Date().getDay();
+    document.getElementById('ord-info').innerHTML=`<div class="alert-b">📅 ${dow===2?'Today is Tuesday — covers Wed–Fri':dow===5?'Today is Friday — covers Sat–Tue':'Order days: Tuesday & Friday'}</div>`;
+    if(!Object.keys(ordQty).length) ORDS.forEach(o=>ordQty[o.n]=o.b);
+    document.getElementById('ord-list').innerHTML=ORDS.map(o=>`
+      <div class="order-item">
+        <div><div style="font-weight:500;color:var(--lighter)">${o.n}</div><div style="font-size:11px;color:var(--light)">${o.u}</div></div>
+        <div class="oqty">
+          <button class="qbtn" onclick="adjQ('${o.n}',-1)">−</button>
+          <div style="min-width:32px;text-align:center;font-weight:600" id="oq-${o.n.replace(/\W/g,'-')}">${ordQty[o.n]}</div>
+          <button class="qbtn" onclick="adjQ('${o.n}',1)">+</button>
+        </div>
+      </div>`).join('');
+    loadPrevOrds();
+  } catch(e){ console.error('renderOrds:',e); }
 }
 
-function adjQ(n,d) { ordQty[n]=Math.max(0,(ordQty[n]||0)+d); const el=document.getElementById('oq-'+n.replace(/\W/g,'-')); if(el) el.textContent=ordQty[n]; }
-function genOrder() { ORDS.forEach(o=>{ ordQty[o.n]=o.b; const el=document.getElementById('oq-'+o.n.replace(/\W/g,'-')); if(el) el.textContent=o.b; }); toast('Quantities suggested.','success'); }
+function adjQ(n,d){ ordQty[n]=Math.max(0,(ordQty[n]||0)+d); const el=document.getElementById('oq-'+n.replace(/\W/g,'-')); if(el) el.textContent=ordQty[n]; }
+function genOrder(){ ORDS.forEach(o=>{ ordQty[o.n]=o.b; const el=document.getElementById('oq-'+o.n.replace(/\W/g,'-')); if(el) el.textContent=o.b; }); toast('Order quantities suggested.','success'); }
+
 async function saveOrder() {
-  await db.collection('kfc_orders').add({date:fd(new Date()),items:{...ordQty},createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-  toast('Order saved!','success'); loadPrevOrds();
+  try {
+    await db.collection('kfc_orders').add({date:fd(new Date()),items:{...ordQty},createdAt:FS.serverTimestamp()});
+    toast('Order saved!','success'); loadPrevOrds();
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
+
 async function loadPrevOrds() {
   const el=document.getElementById('prev-ords');
   try {
     const snap=await db.collection('kfc_orders').orderBy('createdAt','desc').limit(5).get();
-    el.innerHTML=snap.empty?'<p style="color:var(--light);font-size:13px">No previous orders.</p>':snap.docs.map(d=>{const dt=d.data();return`<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)"><div style="font-size:12px;color:var(--gold);margin-bottom:4px">📅 ${dt.date}</div><div style="font-size:13px;color:var(--lighter)">${Object.entries(dt.items||{}).map(([k,v])=>`${k}: <strong>${v}</strong>`).join(' · ')}</div></div>`;}).join('');
+    el.innerHTML=snap.empty?'<p style="color:var(--light);font-size:13px">No previous orders.</p>':snap.docs.map(d=>{const dt=d.data();return`<div style="padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)"><div style="font-size:12px;color:var(--gold);margin-bottom:4px">📅 ${dt.date||''}</div><div style="font-size:13px;color:var(--lighter)">${Object.entries(dt.items||{}).map(([k,v])=>`${k}: <strong>${v}</strong>`).join(' · ')}</div></div>`;}).join('');
   } catch { el.innerHTML='<p style="color:var(--light);font-size:13px">No previous orders.</p>'; }
 }
 
-// ── MESSAGES ──────────────────────────────────────
+// ── MESSAGES ────────────────────────────────────
 function renderMsgs() {
-  document.getElementById('msgs-list').innerHTML=messages.length?messages.map(m=>`
-    <div class="msg-item ${m.read?'':'unread'}">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div><strong style="color:var(--white)">${m.fromName||'?'}</strong> <span style="font-size:11px;color:var(--light)">${m.fromRole||''}</span></div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'}</span>
-          ${!m.read?`<button class="btn btn-g btn-sm" onclick="markRead('${m.id}')">Mark Read</button>`:`<span style="font-size:11px;color:var(--green)">✅</span>`}
+  try {
+    document.getElementById('msgs-list').innerHTML=messages.length?messages.map(m=>`
+      <div class="msg-item ${m.read?'':'unread'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div><strong style="color:var(--white)">${m.fromName||'?'}</strong> <span style="font-size:11px;color:var(--light)">${m.fromRole||''}</span></div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'}</span>
+            ${!m.read?`<button class="btn btn-g btn-sm" onclick="markRead('${m.id}')">Mark Read</button>`:`<span style="font-size:11px;color:var(--green)">✅</span>`}
+          </div>
         </div>
-      </div>
-      <div style="font-size:13px;color:var(--lighter)">${m.message}</div>
-    </div>`).join(''):`<div class="empty"><div class="ei">📭</div><p>No messages yet.</p></div>`;
+        <div style="font-size:13px;color:var(--lighter)">${m.message||''}</div>
+      </div>`).join(''):`<div class="empty"><div class="ei">📭</div><p>No messages yet.</p></div>`;
+  } catch(e){ console.error('renderMsgs:',e); }
 }
 
 async function markRead(id) {
-  await db.collection('kfc_messages').doc(id).update({read:true});
-  const m=messages.find(x=>x.id===id); if(m) m.read=true;
-  renderMsgs(); renderDash();
+  try {
+    await db.collection('kfc_messages').doc(id).update({read:true});
+    const m=messages.find(x=>x.id===id); if(m) m.read=true;
+    renderMsgs(); renderDash();
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
-// ── MY SCHEDULE ───────────────────────────────────
+// ── MY SCHEDULE ─────────────────────────────────
 function renderMySched() {
-  const days=getWeekDays(), fn=CUD?.firstName||'';
-  let myS=[];
-  days.forEach(d=>{ const ds=fd(d); (schedData[ds]||[]).forEach(s=>{ if(s.empId===CU.uid||(fn&&s.empName?.includes(fn))) myS.push({...s,ds,label:d.toLocaleDateString('en-CA',{weekday:'long',month:'short',day:'numeric'})}); }); });
-  let hrs=0; myS.forEach(s=>{ const [sh,sm]=s.start.split(':').map(Number),[eh,em]=s.end.split(':').map(Number); hrs+=(eh*60+em-sh*60-sm)/60; });
-  document.getElementById('my-sc').textContent=myS.length;
-  document.getElementById('my-hr').textContent=hrs.toFixed(1)+'h';
-  document.getElementById('my-sched').innerHTML=myS.length?`<table style="width:100%;font-size:14px"><thead><tr><th>Day</th><th>Time</th><th>Role</th></tr></thead><tbody>${myS.map(s=>`<tr><td>${s.label}</td><td>${s.start}–${s.end}</td><td><span class="badge b-red">${s.role}</span></td></tr>`).join('')}</tbody></table>`
-    :`<div class="empty"><div class="ei">📅</div><p>No shifts this week.</p></div>`;
+  try {
+    const days=getWeekDays(), fn=CUD?.firstName||'';
+    let myS=[];
+    days.forEach(d=>{ const ds=fd(d); (schedData[ds]||[]).forEach(s=>{ if(s.empId===CU?.uid||(fn&&s.empName?.includes(fn))) myS.push({...s,ds,label:d.toLocaleDateString('en-CA',{weekday:'long',month:'short',day:'numeric'})}); }); });
+    let hrs=0; myS.forEach(s=>{ try{ const[sh,sm]=s.start.split(':').map(Number),[eh,em]=s.end.split(':').map(Number); hrs+=(eh*60+em-sh*60-sm)/60; }catch{} });
+    document.getElementById('my-sc').textContent=myS.length;
+    document.getElementById('my-hr').textContent=hrs.toFixed(1)+'h';
+    document.getElementById('my-sched').innerHTML=myS.length
+      ?`<table style="width:100%;font-size:14px"><thead><tr><th>Day</th><th>Time</th><th>Role</th></tr></thead><tbody>${myS.map(s=>`<tr><td>${s.label}</td><td>${s.start}–${s.end}</td><td><span class="badge b-red">${s.role}</span></td></tr>`).join('')}</tbody></table>`
+      :`<div class="empty"><div class="ei">📅</div><p>No shifts this week.</p></div>`;
+  } catch(e){ console.error('renderMySched:',e); }
 }
 
-// ── AVAILABILITY ──────────────────────────────────
+// ── AVAILABILITY ────────────────────────────────
 const WD=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 function renderAvail() {
   document.getElementById('avail-g').innerHTML=WD.map((day,i)=>`
     <div class="avail-day" id="ad-${i}"><div class="dn">${day.slice(0,3)}</div>
     <label class="avail-check"><input type="checkbox" id="ac-${i}" onchange="togAv(${i})"> Available</label>
-    <div class="avail-times" id="at-${i}" style="display:none"><input type="time" id="af-${i}" value="09:00"><input type="time" id="ato-${i}" value="17:00"></div>
-    </div>`).join('');
+    <div class="avail-times" id="at-${i}" style="display:none">
+      <input type="time" id="af-${i}" value="09:00">
+      <input type="time" id="ato-${i}" value="17:00">
+    </div></div>`).join('');
 }
-
-function togAv(i) {
-  const chk=document.getElementById('ac-'+i);
-  document.getElementById('at-'+i).style.display=chk.checked?'flex':'none';
-  document.getElementById('ad-'+i).classList.toggle('on',chk.checked);
-}
-
+function togAv(i){ const c=document.getElementById('ac-'+i); document.getElementById('at-'+i).style.display=c.checked?'flex':'none'; document.getElementById('ad-'+i).classList.toggle('on',c.checked); }
 async function saveAvail() {
-  const avail={};
-  WD.forEach((day,i)=>{ const c=document.getElementById('ac-'+i); if(c?.checked) avail[day]={from:document.getElementById('af-'+i)?.value||'09:00',to:document.getElementById('ato-'+i)?.value||'17:00'}; });
-  await db.collection('kfc_availability').doc(CU.uid).set({uid:CU.uid,name:CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email,availability:avail,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
-  toast('Availability saved!','success');
+  try {
+    const avail={};
+    WD.forEach((day,i)=>{ const c=document.getElementById('ac-'+i); if(c?.checked) avail[day]={from:document.getElementById('af-'+i)?.value||'09:00',to:document.getElementById('ato-'+i)?.value||'17:00'}; });
+    await db.collection('kfc_availability').doc(CU.uid).set({uid:CU.uid,name:CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email,availability:avail,updatedAt:FS.serverTimestamp()});
+    toast('Availability saved!','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
-// ── EMP MESSAGES ──────────────────────────────────
+// ── EMP MESSAGES ────────────────────────────────
 async function sendEmpMsg() {
-  const txt=document.getElementById('emp-msg-txt').value.trim();
-  if(!txt){toast('Write a message first.','error');return;}
-  await db.collection('kfc_messages').add({fromUid:CU.uid,fromName:CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email,fromRole:CUD?.role||'Employee',message:txt,read:false,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-  document.getElementById('emp-msg-txt').value='';
-  toast('Message sent to manager.','success'); renderMyMsgs();
+  try {
+    const txt=document.getElementById('emp-msg-txt').value.trim();
+    if(!txt){ toast('Write a message first.','error'); return; }
+    await db.collection('kfc_messages').add({fromUid:CU.uid,fromName:CUD?`${CUD.firstName} ${CUD.lastName}`:CU.email,fromRole:CUD?.role||'Employee',message:txt,read:false,createdAt:FS.serverTimestamp()});
+    document.getElementById('emp-msg-txt').value='';
+    toast('Message sent!','success'); renderMyMsgs();
+  } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
 async function renderMyMsgs() {
@@ -885,56 +1011,10 @@ async function renderMyMsgs() {
   try {
     const snap=await db.collection('kfc_messages').where('fromUid','==',CU.uid).get();
     const docs=snap.docs.sort((a,b)=>(b.data().createdAt?.toMillis?.()||0)-(a.data().createdAt?.toMillis?.()||0));
-    el.innerHTML=docs.length?docs.map(d=>{const m=d.data();return`<div class="msg-item"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong style="color:var(--white)">To: Manager</strong><span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'} ${m.read?'· ✅ Read':'· ⏳ Unread'}</span></div><div style="font-size:13px;color:var(--lighter)">${m.message}</div></div>`;}).join(''):`<div class="empty"><div class="ei">📤</div><p>No messages sent yet.</p></div>`;
-  } catch { el.innerHTML='<div class="empty"><div class="ei">📤</div><p>No messages sent yet.</p></div>'; }
+    el.innerHTML=docs.length?docs.map(d=>{ const m=d.data(); return`<div class="msg-item"><div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong style="color:var(--white)">To: Manager</strong><span style="font-size:11px;color:var(--light)">${m.createdAt?.toDate?m.createdAt.toDate().toLocaleDateString('en-CA'):'—'} ${m.read?'· ✅':'· ⏳'}</span></div><div style="font-size:13px;color:var(--lighter)">${m.message||''}</div></div>`; }).join('')
+      :`<div class="empty"><div class="ei">📤</div><p>No messages sent yet.</p></div>`;
+  } catch { el.innerHTML='<div class="empty"><div class="ei">📤</div><p>No messages yet.</p></div>'; }
 }
-
-// ── BOOT ──────────────────────────────────────────
-// Always dismiss loading screen and show login after 3s max
-// This handles cases where Firebase onAuthStateChanged never fires
-// (e.g. unauthorized domain, network issue, script blocked)
-let appBooted = false;
-function bootApp() {
-  if (appBooted) return;
-  appBooted = true;
-  const ls = document.getElementById('loading-screen');
-  ls.style.opacity = '0';
-  setTimeout(() => {
-    ls.style.display = 'none';
-    if (!CU) document.getElementById('login-page').classList.add('active');
-  }, 500);
-}
-
-// Firebase should trigger this when auth state is known
-// Wrap original onAuthStateChanged to also call bootApp
-auth.onAuthStateChanged(async user => {
-  bootApp(); // always dismiss loading screen once Firebase responds
-  if (user) {
-    CU = user;
-    const snap = await db.collection('users').doc(user.uid).get();
-    if (snap.exists) {
-      CUD = snap.data();
-      isAdmin = CUD.isAdmin===true || CUD.email===ADMIN_EMAIL;
-    } else {
-      isAdmin = user.email === ADMIN_EMAIL;
-      CUD = isAdmin
-        ? { firstName:'Mohamed Hedi', lastName:'Bouhoula', role:'Store Manager', isAdmin:true }
-        : { firstName: user.email.split('@')[0], lastName:'', role:'Employee', isAdmin:false };
-      if (isAdmin) await db.collection('users').doc(user.uid).set({ ...CUD, email:user.email, createdAt:firebase.firestore.FieldValue.serverTimestamp() });
-    }
-    await loadAll();
-    showApp();
-  } else {
-    CU=null; CUD=null; isAdmin=false;
-    document.getElementById('app').classList.remove('active');
-    document.getElementById('login-page').classList.add('active');
-  }
-});
-
-// Fallback: if Firebase never responds in 4 seconds, show login anyway
-window.addEventListener('load', () => {
-  setTimeout(bootApp, 4000);
-});
 </script>
 </body>
 </html>
