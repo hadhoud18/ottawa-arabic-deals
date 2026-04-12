@@ -1633,62 +1633,171 @@ async function autoSchedule() {
 // ── PRODUCT LABEL SCANNER ────────────────────────
 async function scanProductLabel(file) {
   if (!file) return;
-  const statusEl = document.getElementById('scan-status');
+  const statusEl  = document.getElementById('scan-status');
   const previewEl = document.getElementById('scan-preview');
-  const imgEl = document.getElementById('scan-img');
-  statusEl.innerHTML = '⏳ Reading image...';
-  previewEl.style.display = 'block';
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    imgEl.src = e.target.result;
-    const base64 = e.target.result.split(',')[1];
-    const mediaType = file.type || 'image/jpeg';
-    statusEl.innerHTML = '🤖 AI is reading label...';
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 300,
-          messages: [{ role: 'user', content: [
-            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
-            { type: 'text', text: `This is a food product label or packaging from a KFC restaurant. Extract:
-1. The product name (e.g. "Chicken Breast", "Frying Oil", "Coleslaw Mix")
-2. The best-before / expiry date in YYYY-MM-DD format
-3. The category: one of Chicken, Sauces, Sides, Beverages, Packaging, Other
+  const imgEl     = document.getElementById('scan-img');
 
-Respond ONLY with valid JSON like: {"name":"Chicken Breast","expiry":"2026-04-20","category":"Chicken"}
-No extra text, no markdown.` }
-          ]}]
-        })
-      });
-      const data = await res.json();
-      const text = data.content?.map(c => c.text || '').join('').replace(/```json|```/g,'').trim();
-      const parsed = JSON.parse(text);
-      if (parsed.name) {
-        document.getElementById('ap-name').value = parsed.name;
-        statusEl.innerHTML = `✅ Detected: <strong>${parsed.name}</strong>`;
+  statusEl.style.color = 'var(--light)';
+  statusEl.innerHTML = '⏳ Loading image…';
+  previewEl.style.display = 'block';
+
+  try {
+    // ── Step 1: Read & compress the image ──────────────────────────────
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = e => resolve(e.target.result);
+      reader.onerror = () => reject(new Error('Could not read file'));
+      reader.readAsDataURL(file);
+    });
+
+    imgEl.src = dataUrl;
+
+    // Compress to max 1200px wide and JPEG 0.85 to keep payload small
+    const compressed = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => reject(new Error('Image decode failed'));
+      img.src = dataUrl;
+    });
+
+    const base64    = compressed.split(',')[1];
+    const mediaType = 'image/jpeg'; // always jpeg after canvas compression
+
+    statusEl.innerHTML = '🤖 AI is reading the label…';
+
+    // ── Step 2: Call Claude API ─────────────────────────────────────────
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-4-6',
+        max_tokens: 512,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: base64 }
+            },
+            {
+              type: 'text',
+              text: `You are a food inventory assistant for a KFC restaurant (store 1416).
+
+Look at this image carefully. It may be a product label, box, bag, container lid, or date sticker on food packaging.
+
+Extract the following and respond with ONLY a raw JSON object (no markdown, no explanation):
+{
+  "name": "the product name — e.g. Chicken Breast, Frying Oil, Coleslaw Mix, Gravy Mix, Poutine Fries, Sandwich Buns, Batter Mix, Napkins, Drink Cups, Ketchup Packets",
+  "expiry": "best-before or expiry date in YYYY-MM-DD format — look for text like BB, Best Before, Exp, Use By, BBD, or a date stamp",
+  "category": "one of: Chicken, Sauces, Sides, Beverages, Packaging, Other"
+}
+
+Rules:
+- If you can only read part of the date (e.g. month and year but not day), use day 01 (e.g. "2026-05-01")
+- If the date is in DD/MM/YY format, convert it correctly to YYYY-MM-DD
+- If you cannot find a field, use null for that field
+- Never refuse — always try your best even if the image is slightly blurry
+- Do NOT wrap in markdown code blocks`
+            }
+          ]
+        }]
+      })
+    });
+
+    // ── Step 3: Parse response ──────────────────────────────────────────
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('API error response:', errText);
+      throw new Error(`API ${response.status}: ${errText.slice(0,120)}`);
+    }
+
+    const data = await response.json();
+    console.log('Scan API raw response:', data);
+
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+    const rawText = (data.content || [])
+      .filter(c => c.type === 'text')
+      .map(c => c.text)
+      .join('')
+      .trim();
+
+    console.log('Scan raw text:', rawText);
+
+    // Strip any accidental markdown fences
+    const cleaned = rawText.replace(/^```[\w]*\n?/,'').replace(/\n?```$/,'').trim();
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (jsonErr) {
+      // Try to extract JSON object from text if model added extra words
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        try { parsed = JSON.parse(match[0]); } catch { /* still null */ }
       }
-      if (parsed.expiry) {
+    }
+
+    if (!parsed) {
+      console.error('Could not parse JSON from:', cleaned);
+      statusEl.style.color = '#ff6b6b';
+      statusEl.innerHTML = `⚠️ AI responded but result wasn't readable. Try again or enter manually.<br><small style="color:var(--mid)">${cleaned.slice(0,100)}</small>`;
+      return;
+    }
+
+    // ── Step 4: Fill form fields ────────────────────────────────────────
+    let found = [];
+
+    if (parsed.name && parsed.name !== 'null') {
+      document.getElementById('ap-name').value = parsed.name;
+      found.push(`Product: <strong>${parsed.name}</strong>`);
+    }
+
+    if (parsed.expiry && parsed.expiry !== 'null') {
+      // Validate it looks like a date
+      if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.expiry)) {
         document.getElementById('ap-exp').value = parsed.expiry;
-        statusEl.innerHTML += ` · Expiry: <strong>${parsed.expiry}</strong>`;
+        found.push(`Expiry: <strong>${parsed.expiry}</strong>`);
       }
-      if (parsed.category) {
-        const sel = document.getElementById('ap-cat');
-        for (let i = 0; i < sel.options.length; i++) {
-          if (sel.options[i].value === parsed.category) { sel.selectedIndex = i; break; }
+    }
+
+    if (parsed.category && parsed.category !== 'null') {
+      const sel = document.getElementById('ap-cat');
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value.toLowerCase() === parsed.category.toLowerCase()) {
+          sel.selectedIndex = i;
+          found.push(`Category: <strong>${parsed.category}</strong>`);
+          break;
         }
       }
-      if (!parsed.name && !parsed.expiry) {
-        statusEl.innerHTML = '⚠️ Could not read label — please fill in manually.';
-      }
-    } catch (err) {
-      console.error('Scan error:', err);
-      statusEl.innerHTML = '❌ Scan failed — please enter manually.';
     }
-  };
-  reader.readAsDataURL(file);
+
+    if (found.length === 0) {
+      statusEl.style.color = 'var(--gold)';
+      statusEl.innerHTML = '⚠️ Scan complete but no fields detected. Try a clearer photo closer to the label.';
+    } else {
+      statusEl.style.color = 'var(--green)';
+      statusEl.innerHTML = '✅ ' + found.join(' &nbsp;·&nbsp; ');
+    }
+
+  } catch (err) {
+    console.error('scanProductLabel error:', err);
+    statusEl.style.color = '#ff6b6b';
+    statusEl.innerHTML = `❌ Error: ${err.message}. Check console for details.`;
+  }
 }
 
 // ── PRODUCTS ────────────────────────────────────
@@ -1753,7 +1862,11 @@ async function handleOrderUpload(file) {
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1500,
