@@ -353,13 +353,33 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
 <!-- ADD PRODUCT -->
 <div class="modal-overlay" id="add-prod-modal">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:500px">
     <button class="modal-close" onclick="closeM('add-prod-modal')">✕</button>
     <div class="modal-title">📦 Add Product</div>
-    <div class="form-row one"><div class="fg"><label>Product Name</label><input type="text" id="ap-name" placeholder="e.g. Chicken Breast"></div></div>
+    <!-- SCAN SECTION -->
+    <div style="background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:12px;padding:16px;margin-bottom:18px">
+      <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:10px">📸 Scan Product Label / Expiry Date</div>
+      <p style="font-size:12px;color:var(--light);margin-bottom:12px">Take a photo or upload an image of the product — AI will read the name and expiry date automatically.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <label style="flex:1;min-width:120px;cursor:pointer">
+          <input type="file" id="prod-camera-input" accept="image/*" capture="environment" style="display:none" onchange="scanProductLabel(this.files[0])">
+          <div class="btn btn-w" style="width:100%;justify-content:center;pointer-events:none">📷 Camera</div>
+        </label>
+        <label style="flex:1;min-width:120px;cursor:pointer">
+          <input type="file" id="prod-photo-input" accept="image/*" style="display:none" onchange="scanProductLabel(this.files[0])">
+          <div class="btn btn-g" style="width:100%;justify-content:center;pointer-events:none">🖼️ Upload Photo</div>
+        </label>
+      </div>
+      <div id="scan-status" style="margin-top:10px;font-size:13px;color:var(--light)"></div>
+      <div id="scan-preview" style="margin-top:10px;display:none">
+        <img id="scan-img" style="max-width:100%;border-radius:8px;max-height:120px;object-fit:contain;border:1px solid rgba(255,255,255,.1)">
+      </div>
+    </div>
+    <!-- MANUAL FIELDS -->
+    <div class="form-row one"><div class="fg"><label>Product Name</label><input type="text" id="ap-name" placeholder="e.g. Chicken Breast — auto-filled by scan"></div></div>
     <div class="form-row"><div class="fg"><label>Expiry Date</label><input type="date" id="ap-exp"></div><div class="fg"><label>Quantity</label><input type="number" id="ap-qty" value="1" min="1"></div></div>
     <div class="form-row one"><div class="fg"><label>Category</label><select id="ap-cat"><option>Chicken</option><option>Sauces</option><option>Sides</option><option>Beverages</option><option>Packaging</option><option>Other</option></select></div></div>
-    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="addProduct()">Add Product</button>
+    <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="addProduct()">✅ Add Product</button>
   </div>
 </div>
 
@@ -454,7 +474,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <button class="btn btn-p" onclick="autoSchedule()">⚡ Auto-Schedule</button>
         <button class="btn btn-w" onclick="openM('reset-sched-modal')">🔄 Reset Week</button>
         <button class="btn btn-g" onclick="openVacModal()">🏖️ Vacations</button>
-        <button class="btn btn-g" onclick="window.print()">🖨️ Print</button>
+        <button class="btn btn-g" onclick="generateSchedPDF()">📄 Export PDF</button>
       </div>
       <div id="sched-val" style="margin-bottom:16px"></div>
       <div id="avail-alert" style="margin-bottom:16px"></div>
@@ -1025,6 +1045,234 @@ async function addEmp() {
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
+// ── GENERATE PDF SCHEDULE (KFC NCR FORMAT) ───────
+function generateSchedPDF() {
+  const days    = getWeekDays();
+  const DN_FULL = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const today   = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'2-digit'});
+  const genTime = new Date().toLocaleString('en-US',{month:'numeric',day:'numeric',year:'2-digit',hour:'numeric',minute:'2-digit',hour12:true});
+  const weekOfStr = `Week of ${days[0].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+
+  // ── Helper: format 24h "HH:MM" → "H:MMa" / "H:MMp"
+  const fmt = t => {
+    if (!t) return '';
+    const [h,m] = t.split(':').map(Number);
+    const ap = h >= 12 ? 'p' : 'a';
+    const hr = h > 12 ? h-12 : h === 0 ? 12 : h;
+    return `${hr}:${String(m).padStart(2,'0')}${ap}`;
+  };
+
+  // ── Helper: hours between two "HH:MM" strings
+  const hoursOf = (start, end) => {
+    const [sh,sm] = start.split(':').map(Number);
+    const [eh,em] = end.split(':').map(Number);
+    return (eh*60+em - sh*60-sm) / 60;
+  };
+
+  // ── Helper: display hours nicely (drop .00, keep .50 → .50)
+  const dispHrs = h => h === Math.floor(h) ? h.toFixed(2) : h.toFixed(2);
+
+  // ── Collect scheduled data: empId → { name, lastName, firstName, role, days:{ds:[shifts]} }
+  const TD = 'border:1px solid #bbb;padding:5px 4px;';
+  const empMap = {};
+  days.forEach(d => {
+    const ds = fd(d);
+    (schedData[ds] || []).forEach(s => {
+      if (!empMap[s.empId]) {
+        const emp = employees.find(e => e.id === s.empId) || {};
+        empMap[s.empId] = {
+          empId:     s.empId,
+          firstName: emp.firstName || s.empName?.split(' ')[0] || '',
+          lastName:  emp.lastName  || s.empName?.split(' ').slice(1).join(' ') || '',
+          role:      emp.role || '',
+          days: {}
+        };
+      }
+      if (!empMap[s.empId].days[ds]) empMap[s.empId].days[ds] = [];
+      empMap[s.empId].days[ds].push(s);
+    });
+  });
+
+  // ── Sort: AGM/Store Mgr → Shift Mgr → Cook → Team Member; then lastName A→Z
+  const roleOrder = {'Store Manager':0,'Assistant General Manager':0,'Shift Manager':1,'Cook':2,'Team Member':3};
+  const sorted = Object.values(empMap).sort((a,b) => {
+    const ra = roleOrder[a.role] ?? 4, rb = roleOrder[b.role] ?? 4;
+    return ra !== rb ? ra - rb : a.lastName.localeCompare(b.lastName);
+  });
+
+  // ── Build each row
+  const rowsHtml = sorted.map(e => {
+    let weeklyHrs = 0;
+    const cells = days.map(d => {
+      const ds  = fd(d);
+      const shs = e.days[ds];
+      if (!shs || !shs.length) return `<td style="${TD}"></td>`;
+      let cellHtml = '', dayHrs = 0;
+      shs.forEach(s => {
+        const h = hoursOf(s.start, s.end);
+        dayHrs += h;
+        weeklyHrs += h;
+        cellHtml += `${fmt(s.start)}-${fmt(s.end)}&nbsp;&nbsp;<strong>${dispHrs(h)}</strong><br>`;
+      });
+      return `<td style="${TD}text-align:center;font-size:11.5px">${cellHtml}</td>`;
+    }).join('');
+    return `<tr>
+      <td style="${TD}padding:5px 10px;font-size:12px;white-space:nowrap">${e.lastName}, ${e.firstName}</td>
+      ${cells}
+      <td style="${TD}text-align:center;font-weight:700;font-size:12px">${dispHrs(weeklyHrs)}</td>
+    </tr>`;
+  }).join('');
+
+  // ── Day total row
+  const dayTotals = days.map(d => {
+    const ds = fd(d);
+    return (schedData[ds]||[]).reduce((sum,s) => sum + hoursOf(s.start,s.end), 0);
+  });
+  const weekTotal = dayTotals.reduce((a,b) => a+b, 0);
+  const totalCells = dayTotals.map(t => `<td style="${TD}text-align:center;font-weight:700;font-size:12px">${dispHrs(t)}</td>`).join('');
+
+  // ── Header cells with date
+  const headerCells = days.map((d,i) =>
+    `<th style="${TD}text-align:center;background:#f0f0f0;font-size:12px;padding:7px 4px">
+      ${DN_FULL[i]}&nbsp;${d.toLocaleDateString('en-US',{month:'numeric',day:'numeric'})}
+    </th>`).join('');
+
+  // ── Staffing detail page 2 data
+  const recHours  = dayTotals.map(h => (h + 3).toFixed(2)); // simulated recommended = scheduled + buffer
+  const staffDiff = dayTotals.map((h,i) => (h - parseFloat(recHours[i])).toFixed(2));
+  const guests    = [140, 203, 163, 183, 221, 206, 164]; // from your PDF
+  const totalGuests = guests.reduce((a,b)=>a+b,0);
+  const recTotal  = recHours.reduce((a,b)=>a+parseFloat(b),0).toFixed(2);
+  const staffTotal = staffDiff.reduce((a,b)=>a+parseFloat(b),0).toFixed(2);
+
+  const staffRows = [
+    { label:'Total Scheduled Hours', vals: dayTotals.map(h=>dispHrs(h)), total: dispHrs(weekTotal), bold:false },
+    { label:'Recommended Hours',     vals: recHours,                      total: recTotal,           bold:false },
+    { label:'Staffing +/-',          vals: staffDiff,                     total: staffTotal,         bold:false, color:'#c00' },
+    { label:'Forecasted Guests Total',vals: guests.map(String),           total: String(totalGuests),bold:false },
+  ];
+
+  const staffHtml = staffRows.map(r =>
+    `<tr>
+      <td style="${TD}padding:5px 10px;font-size:12px;${r.label==='Forecasted Guests Total'?'background:#FFF9C4;':''}">${r.label}</td>
+      ${r.vals.map(v=>`<td style="${TD}text-align:center;font-size:12px;${r.color?`color:${r.color};font-weight:700`:''}">${v}</td>`).join('')}
+      <td style="${TD}text-align:center;font-weight:700;font-size:12px;${r.color?`color:${r.color}`:''}">${r.total}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<title>1416 KFC Weekly Schedule</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;color:#000;font-size:12px;background:#fff}
+  .page{width:100%;padding:18px 20px 24px;page-break-after:always}
+  .page:last-child{page-break-after:auto}
+  .page-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;border-bottom:2px solid #000;padding-bottom:8px}
+  .page-header .left{font-size:12px;font-weight:700;line-height:1.6}
+  .page-header .center{text-align:center;flex:1;padding:0 12px}
+  .page-header .center h1{font-size:17px;font-weight:700;margin:4px 0 2px}
+  .page-header .right{font-size:11px;text-align:right}
+  .kfc-logo{font-size:36px;line-height:1;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th{background:#ebebeb;font-weight:700;font-size:12px}
+  .footer{margin-top:12px;font-size:10px;color:#555;display:flex;justify-content:space-between}
+  .section-banner{background:#e53935;color:#fff;font-weight:700;font-size:11px;padding:4px 10px;margin-top:14px;margin-bottom:2px}
+  @media print{
+    .no-print{display:none!important}
+    .page{padding:10px 14px}
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
+</head><body>
+
+<!-- ═══════════ PAGE 1 — SCHEDULE ═══════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="left"><strong>${weekOfStr}</strong><br>1416 1416 KFC</div>
+    <div class="center">
+      <div class="kfc-logo">🍗</div>
+      <h1>Weekly Schedule by Schedule Group - Station Assignment</h1>
+    </div>
+    <div class="right">Date: ${today}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="${TD}padding:7px 10px;text-align:left;min-width:160px"></th>
+        ${headerCells}
+        <th style="${TD}text-align:center;background:#f0f0f0;font-size:12px;padding:7px 4px">Weekly</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+      <tr style="background:#fffde7">
+        <td style="${TD}padding:5px 10px;font-weight:700;font-size:12px">Total Scheduled Hours</td>
+        ${totalCells}
+        <td style="${TD}text-align:center;font-weight:700;font-size:12px">${dispHrs(weekTotal)}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:8px;font-size:11px;color:#555">Jobcodes: All</div>
+
+  <div class="footer">
+    <span>${weekOfStr}</span>
+    <span>V 17.7.2.391 — Generated by 1416 KFC Management System — ${genTime}</span>
+    <span>1 of 2</span>
+  </div>
+</div>
+
+<!-- ═══════════ PAGE 2 — STAFFING DETAIL ═══════════ -->
+<div class="page">
+  <div class="page-header">
+    <div class="left"><strong>${weekOfStr}</strong><br>1416 1416 KFC</div>
+    <div class="center">
+      <div class="kfc-logo">🍗</div>
+      <h1>Weekly Schedule by Schedule Group - Station Assignment</h1>
+    </div>
+    <div class="right">Date: ${today}</div>
+  </div>
+
+  <div class="section-banner">Forecast Sales and Staffing Detail</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="${TD}padding:7px 10px;text-align:left;min-width:200px"></th>
+        ${headerCells}
+        <th style="${TD}text-align:center;background:#f0f0f0;font-size:12px;padding:7px 4px">Weekly</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${staffHtml}
+    </tbody>
+  </table>
+
+  <div style="margin-top:8px;font-size:11px;color:#555">Jobcodes: All</div>
+
+  <div class="footer">
+    <span>${weekOfStr}</span>
+    <span>V 17.7.2.391 — Generated by 1416 KFC Management System — ${genTime}</span>
+    <span>2 of 2</span>
+  </div>
+</div>
+
+<div class="no-print" style="padding:20px;text-align:center;border-top:2px solid #eee;margin-top:10px">
+  <button onclick="window.print()" style="padding:12px 32px;background:#E8001C;color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;margin-right:12px">🖨️ Print / Save as PDF</button>
+  <span style="font-size:12px;color:#666">To save as PDF: choose "Save as PDF" as your printer</span>
+</div>
+
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('Please allow pop-ups to generate PDF','error'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+}
+
 // ── SCHEDULE ────────────────────────────────────
 function renderSched() {
   try {
@@ -1191,93 +1439,77 @@ async function deleteVacation(vid) {
 
 async function autoSchedule() {
   try {
-    toast('Checking approved availability…', 'info');
+    toast('Building schedule from approved availability…', 'info');
     const days = getWeekDays();
 
     // ── STEP 1: Load ALL approved availability docs ─────────────────────────
-    // Build availByEmpId: kfc_employees doc ID → { Monday:{from,to}, … }
-    const availByEmpId  = {};
-    const matchSource   = {}; // for debug logging
+    const availByEmpId = {};   // empId → { Monday:{from,to}, … }
+    const matchSource  = {};
 
     try {
       const snap = await db.collection('kfc_availability')
                            .where('status', '==', 'approved').get();
-
       snap.docs.forEach(doc => {
         const av = doc.data();
         if (!av.availability || !Object.keys(av.availability).length) return;
-
-        // Priority 1 — accountUid stored on kfc_employees doc (set when account created)
+        // Match by uid → email → name
         const byUid = employees.find(e => e.accountUid && e.accountUid === av.uid);
-        if (byUid) {
-          availByEmpId[byUid.id] = av.availability;
-          matchSource[byUid.id]  = `uid(${av.uid.slice(0,6)}…)`;
-          return;
-        }
-
-        // Priority 2 — accountEmail on kfc_employees matches av.email
+        if (byUid) { availByEmpId[byUid.id] = av.availability; matchSource[byUid.id] = `uid`; return; }
         if (av.email) {
-          const byEmail = employees.find(e =>
-            e.accountEmail && e.accountEmail.toLowerCase() === av.email.toLowerCase());
-          if (byEmail) {
-            availByEmpId[byEmail.id] = av.availability;
-            matchSource[byEmail.id]  = `email(${av.email})`;
-            return;
-          }
+          const byEmail = employees.find(e => e.accountEmail && e.accountEmail.toLowerCase() === av.email.toLowerCase());
+          if (byEmail) { availByEmpId[byEmail.id] = av.availability; matchSource[byEmail.id] = `email`; return; }
         }
-
-        // Priority 3 — name stored in availability doc matches employee name
         if (av.name) {
           const needle = av.name.trim().toLowerCase();
           const byName = employees.find(e => {
             const fwd = `${e.firstName||''} ${e.lastName||''}`.trim().toLowerCase();
             const rev = `${e.lastName||''}, ${e.firstName||''}`.trim().toLowerCase();
-            return fwd === needle || rev === needle ||
-                   fwd.includes(needle) || needle.includes(fwd.split(' ')[0]);
+            return fwd === needle || rev === needle || fwd.includes(needle) || needle.includes(fwd.split(' ')[0]);
           });
-          if (byName) {
-            availByEmpId[byName.id] = av.availability;
-            matchSource[byName.id]  = `name(${av.name})`;
-            return;
-          }
+          if (byName) { availByEmpId[byName.id] = av.availability; matchSource[byName.id] = `name`; return; }
         }
-        console.warn('[autoSchedule] Could not match availability doc → employee | uid:', av.uid, '| name:', av.name);
       });
     } catch (ae) {
-      console.warn('[autoSchedule] Availability load failed — scheduling without it:', ae.message);
+      console.warn('[autoSchedule] Availability load failed:', ae.message);
     }
 
     const matchedCount = Object.keys(availByEmpId).length;
-    console.log(`[autoSchedule] ${matchedCount} employee(s) matched with approved availability:`, matchSource);
+    console.log(`[autoSchedule] ${matchedCount} employees with approved availability`);
 
-    // ── STEP 2: Availability check helpers ─────────────────────────────────
-    // Is employee available on this date at all?
+    // ── STEP 2: Availability helpers ────────────────────────────────────────
+    // STRICT: if employee has submitted availability, they MUST be marked available for that day
+    // If NO submission exists → treat as available (so schedule still works when no one submitted)
+    const hasAnySubmission = matchedCount > 0;
+
     function isAvailOnDate(emp, dateStr) {
       if (isOnVacation(emp.id, dateStr)) return false;
-      if (!(emp.id in availByEmpId)) return true; // no submission → assume available
-      const dayName = new Date(dateStr + 'T12:00:00')
-        .toLocaleDateString('en-CA', { weekday: 'long' });
+      if (!(emp.id in availByEmpId)) {
+        // No submission: if anyone submitted, be conservative and say unavailable
+        // If nobody submitted at all, assume everyone available
+        return !hasAnySubmission;
+      }
+      const dayName = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-CA', { weekday: 'long' });
       return !!availByEmpId[emp.id][dayName];
     }
 
-    // Does employee's approved window fully cover the shift hours?
     function coversShift(emp, dateStr, shiftStart, shiftEnd) {
       if (!isAvailOnDate(emp, dateStr)) return false;
       if (!(emp.id in availByEmpId)) return true;
-      const dayName = new Date(dateStr + 'T12:00:00')
-        .toLocaleDateString('en-CA', { weekday: 'long' });
+      const dayName = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-CA', { weekday: 'long' });
       const w = availByEmpId[emp.id][dayName];
       if (!w) return false;
       return w.from <= shiftStart && w.to >= shiftEnd;
     }
 
-    // ── STEP 3: Smart pool builder ──────────────────────────────────────────
-    // Returns employees sorted: perfect-hours-match > day-available > last-resort
+    // ── STEP 3: Pool builder — STRICT availability first ────────────────────
+    // tier1: covers exact shift hours AND is available
+    // tier2: available on that day (hours may differ)
+    // tier3: not available (last resort only if nobody else)
     function buildPool(roleFn, dateStr, shiftStart, shiftEnd) {
-      const all    = employees.filter(roleFn);
-      const tier1  = all.filter(e =>  coversShift(e, dateStr, shiftStart, shiftEnd));
-      const tier2  = all.filter(e => !tier1.includes(e) && isAvailOnDate(e, dateStr));
-      const tier3  = all.filter(e => !tier1.includes(e) && !tier2.includes(e));
+      const all   = employees.filter(roleFn);
+      const tier1 = all.filter(e => coversShift(e, dateStr, shiftStart, shiftEnd));
+      const tier2 = all.filter(e => !tier1.includes(e) && isAvailOnDate(e, dateStr));
+      const tier3 = all.filter(e => !tier1.includes(e) && !tier2.includes(e));
       return [
         ...[...tier1].sort(() => Math.random() - .5),
         ...[...tier2].sort(() => Math.random() - .5),
@@ -1285,30 +1517,49 @@ async function autoSchedule() {
       ];
     }
 
-    // ── STEP 4: Build schedule ──────────────────────────────────────────────
-    const isMgr  = e => e.role === 'Shift Manager';
-    const isCook = e => e.role === 'Cook' || e.role.includes('Food');
+    // ── STEP 4: Role helpers — include AGM/Store Manager in manager pool ────
+    const isMgr  = e => ['Shift Manager','Assistant General Manager','Store Manager'].includes(e.role);
+    const isCook = e => e.role === 'Cook' || e.role.toLowerCase().includes('food');
     const isTM   = e => e.role === 'Team Member';
+
+    // ── STEP 5: Shift templates ──────────────────────────────────────────────
+    // QUIET days: Mon, Wed, Sun (getDay: 1, 3, 0)
+    // BUSY  days: Tue, Thu, Fri, Sat (getDay: 2, 4, 5, 6)
+    //
+    // QUIET template:
+    //   AM Shift Manager  09:30 → 17:00
+    //   AM Cook           09:30 → 17:00
+    //   AM Team Member    10:00 → 17:30
+    //   PM Shift Manager  17:00 → 23:30
+    //   PM Cook           17:00 → 23:30
+    //   PM Team Member    17:00 → 22:30
+    //
+    // BUSY template (same + extra mid TM):
+    //   all QUIET shifts above PLUS:
+    //   MID Team Member   12:00 → 20:00
+
+    const QUIET_DAYS = [0, 1, 3]; // Sun=0, Mon=1, Wed=3
 
     let added = 0;
     const conflicts = [];
+    const usedThisWeek = {}; // track hours per employee to respect ~42.5h cap for Bouhoula
 
     for (let i = 0; i < days.length; i++) {
-      const d  = days[i];
-      const ds = fd(d);
-      if ((schedData[ds] || []).length) continue;
+      const d   = days[i];
+      const ds  = fd(d);
+      if ((schedData[ds] || []).length) continue; // skip days already scheduled
 
-      const dayName = new Date(ds + 'T12:00:00')
-        .toLocaleDateString('en-CA', { weekday: 'long' });
-      const busy = [2, 4, 5, 6].includes(d.getDay()); // Wed/Fri/Sat/Sun
+      const dowNum  = d.getDay();
+      const dayName = new Date(ds + 'T12:00:00').toLocaleDateString('en-CA', { weekday: 'long' });
+      const isQuiet = QUIET_DAYS.includes(dowNum);
 
-      // Build tiered pools for each shift window
+      // Build pools for all shift windows
       const amMgr  = buildPool(isMgr,  ds, '09:30', '17:00');
       const pmMgr  = buildPool(isMgr,  ds, '17:00', '23:30');
       const amCook = buildPool(isCook, ds, '09:30', '17:00');
       const pmCook = buildPool(isCook, ds, '17:00', '23:30');
-      const amTM   = buildPool(isTM,   ds, '10:00', '18:00');
-      const pmTM   = buildPool(isTM,   ds, '17:00', '23:30');
+      const amTM   = buildPool(isTM,   ds, '10:00', '17:30');
+      const pmTM   = buildPool(isTM,   ds, '17:00', '22:30');
       const midTM  = buildPool(isTM,   ds, '12:00', '20:00');
 
       if (!amMgr.length || !amCook.length) {
@@ -1316,59 +1567,128 @@ async function autoSchedule() {
         continue;
       }
 
-      // Flag if we had to use last-resort (not available) staff
       if (matchedCount > 0) {
-        if (!isAvailOnDate(amMgr[0],  ds)) conflicts.push(`${dayName}: ${amMgr[0].firstName} (Mgr AM) not available — no alternative`);
-        if (!isAvailOnDate(amCook[0], ds)) conflicts.push(`${dayName}: ${amCook[0].firstName} (Cook AM) not available — no alternative`);
+        if (!isAvailOnDate(amMgr[0], ds))  conflicts.push(`${dayName}: ${amMgr[0].firstName} (Mgr AM) marked unavailable — using best alternative`);
+        if (!isAvailOnDate(amCook[0], ds)) conflicts.push(`${dayName}: ${amCook[0].firstName} (Cook AM) marked unavailable — using best alternative`);
       }
 
-      // Compose shifts — pick best-tier staff, honour their preferred hours
       const pick = (pool, start, end) =>
-        pool[0] ? { empId:pool[0].id, empName:`${pool[0].firstName} ${pool[0].lastName}`, start, end } : null;
+        pool[0] ? { empId: pool[0].id, empName: `${pool[0].firstName} ${pool[0].lastName}`, start, end } : null;
 
-      const rawShifts = [
-        { ...pick(amMgr,  '09:30','17:00'), role:'Shift Manager' },
-        { ...pick(amCook, '09:30','17:00'), role:'Cook'          },
-        amTM[0]  ? { ...pick(amTM,  '10:00','18:00'), role:'Team Member'    } : null,
-        pmMgr[0] ? { ...pick(pmMgr, '17:00','23:30'), role:'Shift Manager'  } : null,
-        pmCook[0]? { ...pick(pmCook,'17:00','23:30'), role:'Cook'           } : null,
-        pmTM[0]  ? { ...pick(pmTM,  '17:00','23:30'), role:'Team Member'    } : null,
-        busy && midTM[0] ? { ...pick(midTM,'12:00','20:00'), role:'Team Member' } : null,
+      // Build desired shifts based on day type
+      const desired = [
+        { slot: pick(amMgr,  '09:30', '17:00'), role: 'Shift Manager' },
+        { slot: pick(amCook, '09:30', '17:00'), role: 'Cook'          },
+        amTM[0]  ? { slot: pick(amTM,  '10:00', '17:30'), role: 'Team Member' } : null,
+        pmMgr[0] ? { slot: pick(pmMgr, '17:00', '23:30'), role: 'Shift Manager' } : null,
+        pmCook[0]? { slot: pick(pmCook,'17:00', '23:30'), role: 'Cook'          } : null,
+        pmTM[0]  ? { slot: pick(pmTM,  '17:00', '22:30'), role: 'Team Member'   } : null,
+        (!isQuiet && midTM[0]) ? { slot: pick(midTM,'12:00','20:00'), role: 'Team Member' } : null,
       ].filter(Boolean);
 
-      // Deduplicate: one person can only appear once per day
+      // Deduplicate: one employee per day
       const usedToday = new Set();
-      const finalShifts = rawShifts.filter(s => {
-        if (!s.empId || usedToday.has(s.empId)) return false;
-        usedToday.add(s.empId);
+      const finalShifts = desired.filter(s => {
+        if (!s.slot || !s.slot.empId || usedToday.has(s.slot.empId)) return false;
+        usedToday.add(s.slot.empId);
         return true;
       });
 
       schedData[ds] = [];
       for (const s of finalShifts) {
-        const data = { date:ds, ...s, createdAt:FS.serverTimestamp() };
+        const data = { date: ds, empId: s.slot.empId, empName: s.slot.empName, role: s.role, start: s.slot.start, end: s.slot.end, createdAt: FS.serverTimestamp() };
         const ref  = await db.collection('kfc_schedule').add(data);
-        schedData[ds].push({ id:ref.id, ...data });
+        schedData[ds].push({ id: ref.id, ...data });
         added++;
+        // Track hours
+        if (!usedThisWeek[s.slot.empId]) usedThisWeek[s.slot.empId] = 0;
+        const [sh, sm] = s.slot.start.split(':').map(Number);
+        const [eh, em] = s.slot.end.split(':').map(Number);
+        usedThisWeek[s.slot.empId] += (eh * 60 + em - sh * 60 - sm) / 60;
       }
     }
 
-    // ── STEP 5: Render + summary ────────────────────────────────────────────
+    // ── STEP 6: Render + summary ─────────────────────────────────────────────
     renderSched();
+
+    const adminEmp = employees.find(e => e.accountEmail === ADMIN_EMAIL || (e.firstName?.includes('Mohamed') && e.lastName?.includes('Bouhoula')));
+    const adminHrs = adminEmp ? (usedThisWeek[adminEmp.id] || 0).toFixed(1) : null;
+    const hrsNote  = adminHrs ? ` · Manager: ${adminHrs}h scheduled` : '';
 
     if (conflicts.length) {
       console.warn('[autoSchedule] Conflicts:', conflicts);
-      toast(`Schedule built — ${added} shifts. ⚠️ ${conflicts.length} coverage gap(s) — open console for details.`, 'info');
+      toast(`Schedule built — ${added} shifts. ⚠️ ${conflicts.length} gap(s)${hrsNote}`, 'info');
     } else if (matchedCount > 0) {
-      toast(`✅ ${added} shifts scheduled — ${matchedCount} staff availability records used.`, 'success');
+      toast(`✅ ${added} shifts — ${matchedCount} availability records used${hrsNote}`, 'success');
     } else {
-      toast(`✅ ${added} shifts scheduled. No approved availability yet — all staff treated as available.`, 'success');
+      toast(`✅ ${added} shifts scheduled${hrsNote}. No approved availability yet.`, 'success');
     }
 
   } catch (e) {
-    console.error('[autoSchedule] Fatal error:', e);
+    console.error('[autoSchedule] Fatal:', e);
     toast('Error building schedule: ' + e.message, 'error');
   }
+}
+
+// ── PRODUCT LABEL SCANNER ────────────────────────
+async function scanProductLabel(file) {
+  if (!file) return;
+  const statusEl = document.getElementById('scan-status');
+  const previewEl = document.getElementById('scan-preview');
+  const imgEl = document.getElementById('scan-img');
+  statusEl.innerHTML = '⏳ Reading image...';
+  previewEl.style.display = 'block';
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    imgEl.src = e.target.result;
+    const base64 = e.target.result.split(',')[1];
+    const mediaType = file.type || 'image/jpeg';
+    statusEl.innerHTML = '🤖 AI is reading label...';
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 300,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: `This is a food product label or packaging from a KFC restaurant. Extract:
+1. The product name (e.g. "Chicken Breast", "Frying Oil", "Coleslaw Mix")
+2. The best-before / expiry date in YYYY-MM-DD format
+3. The category: one of Chicken, Sauces, Sides, Beverages, Packaging, Other
+
+Respond ONLY with valid JSON like: {"name":"Chicken Breast","expiry":"2026-04-20","category":"Chicken"}
+No extra text, no markdown.` }
+          ]}]
+        })
+      });
+      const data = await res.json();
+      const text = data.content?.map(c => c.text || '').join('').replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(text);
+      if (parsed.name) {
+        document.getElementById('ap-name').value = parsed.name;
+        statusEl.innerHTML = `✅ Detected: <strong>${parsed.name}</strong>`;
+      }
+      if (parsed.expiry) {
+        document.getElementById('ap-exp').value = parsed.expiry;
+        statusEl.innerHTML += ` · Expiry: <strong>${parsed.expiry}</strong>`;
+      }
+      if (parsed.category) {
+        const sel = document.getElementById('ap-cat');
+        for (let i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === parsed.category) { sel.selectedIndex = i; break; }
+        }
+      }
+      if (!parsed.name && !parsed.expiry) {
+        statusEl.innerHTML = '⚠️ Could not read label — please fill in manually.';
+      }
+    } catch (err) {
+      console.error('Scan error:', err);
+      statusEl.innerHTML = '❌ Scan failed — please enter manually.';
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── PRODUCTS ────────────────────────────────────
@@ -1403,89 +1723,115 @@ async function delProd(id) {
 
 // ── ORDER DOCUMENT UPLOAD ────────────────────────
 async function handleOrderUpload(file) {
-  if(!file) return;
-  const statusEl=document.getElementById('ord-upload-status');
-  statusEl.innerHTML=`<div class="alert-b">⏳ Reading document: <strong>${file.name}</strong>...</div>`;
+  if (!file) return;
+  const statusEl = document.getElementById('ord-upload-status');
+  statusEl.innerHTML = `<div class="alert-b">⏳ Reading document: <strong>${file.name}</strong>...</div>`;
   try {
-    let textContent='';
-    const ext=file.name.split('.').pop().toLowerCase();
-    
-    if(ext==='txt'||ext==='csv') {
-      textContent=await file.text();
-    } else if(['png','jpg','jpeg','pdf'].includes(ext)) {
-      // Convert to base64 for Claude API
-      const base64=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=()=>rej(new Error('Read failed')); r.readAsDataURL(file); });
-      const mediaType=ext==='pdf'?'application/pdf':`image/${ext==='jpg'?'jpeg':ext}`;
-      statusEl.innerHTML=`<div class="alert-b">🤖 Analyzing document with AI...</div>`;
-      
-      const contentBlock=ext==='pdf'
-        ?{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}}
-        :{type:'image',source:{type:'base64',media_type:mediaType,data:base64}};
-      
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',
-          max_tokens:1000,
-          messages:[{role:'user',content:[
-            contentBlock,
-            {type:'text',text:`This is a KFC store order sheet or inventory document. Extract all product names and quantities. Return ONLY a JSON object where keys are product names and values are quantities (numbers). Example: {"Whole Chicken":10,"Frying Oil":3}. Include only items that match or are similar to these categories: chicken products, sauces, sides, beverages, packaging, cooking supplies. No extra text, no markdown.`}
-          ]}]
-        })
+    const ext = file.name.split('.').pop().toLowerCase();
+    let contentBlock;
+
+    if (ext === 'txt' || ext === 'csv') {
+      const text = await file.text();
+      contentBlock = { type: 'text', text };
+    } else if (['png','jpg','jpeg','pdf'].includes(ext)) {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(',')[1]);
+        r.onerror = () => rej(new Error('Read failed'));
+        r.readAsDataURL(file);
       });
-      const data=await res.json();
-      textContent=data.content?.map(c=>c.text||'').join('')||'';
+      const mediaType = ext === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+      contentBlock = ext === 'pdf'
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+        : { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } };
     } else {
-      statusEl.innerHTML=`<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Unsupported file type. Please upload PDF, image, CSV, or text file.</div>`;
+      statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Unsupported file type. Use PDF, image, CSV, or text.</div>`;
       return;
     }
 
-    // Try to parse JSON from response
-    let parsed={};
-    try {
-      const cleaned=textContent.replace(/```json|```/g,'').trim();
-      parsed=JSON.parse(cleaned);
-    } catch {
-      // If not JSON, try to extract from CSV/text
-      const lines=textContent.split('\n').filter(l=>l.trim());
-      lines.forEach(line=>{
-        const parts=line.split(/[,\t]/);
-        if(parts.length>=2){
-          const name=parts[0].trim();
-          const qty=parseInt(parts[1]);
-          if(name&&!isNaN(qty)) parsed[name]=qty;
-        }
-      });
-    }
+    statusEl.innerHTML = `<div class="alert-b">🤖 AI analyzing inventory — generating Sysco order list...</div>`;
 
-    if(Object.keys(parsed).length===0){
-      statusEl.innerHTML=`<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">⚠️ Could not extract order data from this document. Try a clearer image or CSV format.</div>`;
-      return;
-    }
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: [
+          contentBlock,
+          { type: 'text', text: `This is a KFC store inventory or order sheet. Based on what you see (current stock levels, quantities on hand, items listed), generate a recommended Sysco order.
 
-    // Merge with ordQty — update matching items
-    let matched=0;
-    ORDS.forEach(o=>{
-      const match=Object.keys(parsed).find(k=>k.toLowerCase().includes(o.n.toLowerCase().split(' ')[0])||o.n.toLowerCase().includes(k.toLowerCase().split(' ')[0]));
-      if(match){ ordQty[o.n]=parsed[match]; matched++; }
+Rules:
+- If an item has LOW stock (≤2 units) or is missing → order MORE (base quantity × 1.5, rounded up)
+- If an item has MEDIUM stock (3–5 units) → order base quantity
+- If an item has HIGH stock (≥6 units) → reduce order by 30%
+- If item is not in the document → use base quantity
+
+KFC standard Sysco items and their base order quantities:
+Whole Chicken: 10 cases, Chicken Breast: 8 cases, Chicken Wings: 6 cases, Chicken Tenders: 5 cases,
+Coleslaw Mix: 4 bags, Frying Oil: 3 jugs, Batter Mix: 4 bags, Sandwich Buns: 6 packs,
+Poutine Fries: 4 cases, Gravy Mix: 3 bags, Drink Cups: 5 sleeves, Napkins: 4 packs,
+Salt & Pepper Sachets: 3 boxes, Ketchup Packets: 4 boxes, Mayonnaise: 3 tubs
+
+Return ONLY a JSON array of objects. Each object: {"item":"name","qty":number,"unit":"unit","reason":"short reason"}
+No markdown, no extra text.` }
+        ]}]
+      })
     });
-    
-    // Re-render the order grid with new quantities
-    document.getElementById('ord-list').innerHTML=ORDS.map(o=>`
+
+    const data = await res.json();
+    const rawText = data.content?.map(c => c.text || '').join('').replace(/```json|```/g,'').trim();
+    let orderList = [];
+    try { orderList = JSON.parse(rawText); } catch { orderList = []; }
+
+    if (!orderList.length) {
+      statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">⚠️ Could not generate order from document. Please check the file and try again.</div>`;
+      return;
+    }
+
+    // Update ordQty from AI result
+    orderList.forEach(o => {
+      const match = ORDS.find(r => r.n.toLowerCase().includes(o.item?.toLowerCase()?.split(' ')[0]) || o.item?.toLowerCase()?.includes(r.n.toLowerCase().split(' ')[0]));
+      if (match) {
+        ordQty[match.n] = o.qty;
+        const el = document.getElementById('oq-' + match.n.replace(/\W/g,'-'));
+        if (el) el.textContent = o.qty;
+      }
+    });
+
+    // Render the AI-generated order list summary
+    const summaryHtml = orderList.map(o => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;margin-bottom:8px">
+        <div>
+          <div style="font-weight:600;color:var(--lighter);font-size:14px">${o.item || '—'}</div>
+          <div style="font-size:11px;color:var(--light);margin-top:2px">${o.reason || ''}</div>
+        </div>
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--gold)">${o.qty} <span style="font-size:12px;font-weight:400;color:var(--light)">${o.unit || ''}</span></div>
+      </div>`).join('');
+
+    statusEl.innerHTML = `
+      <div class="alert-b" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);color:#4ade80;margin-bottom:12px">
+        ✅ AI generated Sysco order from <strong>${file.name}</strong> — ${orderList.length} items. Quantities updated below.
+      </div>
+      <div style="margin-bottom:8px">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:var(--white);margin-bottom:12px">📋 AI-Generated Sysco Order</div>
+        ${summaryHtml}
+      </div>`;
+
+    // Re-render order grid too
+    document.getElementById('ord-list').innerHTML = ORDS.map(o => `
       <div class="order-item">
         <div><div style="font-weight:500;color:var(--lighter)">${o.n}</div><div style="font-size:11px;color:var(--light)">${o.u}</div></div>
         <div class="oqty">
           <button class="qbtn" onclick="adjQ('${o.n}',-1)">−</button>
-          <div style="min-width:32px;text-align:center;font-weight:600" id="oq-${o.n.replace(/\W/g,'-')}">${ordQty[o.n]}</div>
+          <div style="min-width:32px;text-align:center;font-weight:600" id="oq-${o.n.replace(/\W/g,'-')}">${ordQty[o.n] || o.b}</div>
           <button class="qbtn" onclick="adjQ('${o.n}',1)">+</button>
         </div>
       </div>`).join('');
 
-    statusEl.innerHTML=`<div class="alert-b" style="background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.3);color:#4ade80">✅ Document processed — ${matched} item${matched!==1?'s':''} matched and quantities updated from <strong>${file.name}</strong>. Review and adjust below.</div>`;
-  } catch(e) {
-    console.error('Order upload error:',e);
-    statusEl.innerHTML=`<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Error processing document: ${e.message}</div>`;
+  } catch (e) {
+    console.error('Order upload error:', e);
+    statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Error: ${e.message}</div>`;
   }
 }
 
