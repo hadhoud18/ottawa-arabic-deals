@@ -8,6 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 :root{--red:#E8001C;--red-dark:#B0001A;--gold:#F5A623;--gold-light:#FFD27F;--dark:#1A1109;--dark2:#2C1D0E;--dark3:#3D2B15;--mid:#6B4C2A;--light:#C4A882;--lighter:#EDD9BE;--white:#FFFDF9;--green:#22C55E;--orange:#F97316;--blue:#3B82F6;--success:#16A34A;--danger:#DC2626;--sidebar-w:240px}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -356,27 +357,50 @@ tr:hover td{background:rgba(255,255,255,.02)}
   <div class="modal-box" style="max-width:500px">
     <button class="modal-close" onclick="closeM('add-prod-modal')">✕</button>
     <div class="modal-title">📦 Add Product</div>
+
     <!-- SCAN SECTION -->
-    <div style="background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:12px;padding:16px;margin-bottom:18px">
-      <div style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:10px">📸 Scan Product Label / Expiry Date</div>
-      <p style="font-size:12px;color:var(--light);margin-bottom:12px">Take a photo or upload an image of the product — AI will read the name and expiry date automatically.</p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <label style="flex:1;min-width:120px;cursor:pointer">
+    <div style="background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.25);border-radius:12px;padding:16px;margin-bottom:20px">
+      <div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px;letter-spacing:.5px">📸 SCAN LABEL / DATE STICKER</div>
+      <p style="font-size:12px;color:var(--light);margin-bottom:12px;line-height:1.5">Point your camera at the product label or expiry date sticker. Works best when the label is flat, well-lit and fills the frame.</p>
+
+      <!-- Buttons -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <label style="flex:1;min-width:110px;cursor:pointer">
           <input type="file" id="prod-camera-input" accept="image/*" capture="environment" style="display:none" onchange="scanProductLabel(this.files[0])">
-          <div class="btn btn-w" style="width:100%;justify-content:center;pointer-events:none">📷 Camera</div>
+          <div class="btn btn-w" style="width:100%;justify-content:center;pointer-events:none;font-size:13px">📷 Camera</div>
         </label>
-        <label style="flex:1;min-width:120px;cursor:pointer">
+        <label style="flex:1;min-width:110px;cursor:pointer">
           <input type="file" id="prod-photo-input" accept="image/*" style="display:none" onchange="scanProductLabel(this.files[0])">
-          <div class="btn btn-g" style="width:100%;justify-content:center;pointer-events:none">🖼️ Upload Photo</div>
+          <div class="btn btn-g" style="width:100%;justify-content:center;pointer-events:none;font-size:13px">🖼️ Upload Photo</div>
         </label>
+        <button class="btn btn-g" id="scan-clear-btn" onclick="clearScan()" style="display:none;font-size:13px">✕ Clear</button>
       </div>
-      <div id="scan-status" style="margin-top:10px;font-size:13px;color:var(--light)"></div>
-      <div id="scan-preview" style="margin-top:10px;display:none">
-        <img id="scan-img" style="max-width:100%;border-radius:8px;max-height:120px;object-fit:contain;border:1px solid rgba(255,255,255,.1)">
+
+      <!-- Preview image -->
+      <div id="scan-preview" style="display:none;margin-bottom:10px;position:relative">
+        <img id="scan-img" style="width:100%;border-radius:8px;max-height:160px;object-fit:contain;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1)">
       </div>
+
+      <!-- Progress bar -->
+      <div id="scan-progress-wrap" style="display:none;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:11px;color:var(--light)" id="scan-progress-label">Initialising OCR engine…</span>
+          <span style="font-size:11px;color:var(--gold);font-weight:700" id="scan-progress-pct">0%</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+          <div id="scan-progress-bar" style="height:100%;width:0%;background:var(--gold);border-radius:3px;transition:width .2s"></div>
+        </div>
+      </div>
+
+      <!-- Status / result -->
+      <div id="scan-status" style="font-size:13px;color:var(--light);line-height:1.5"></div>
+
+      <!-- Detected fields preview chips -->
+      <div id="scan-chips" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
     </div>
-    <!-- MANUAL FIELDS -->
-    <div class="form-row one"><div class="fg"><label>Product Name</label><input type="text" id="ap-name" placeholder="e.g. Chicken Breast — auto-filled by scan"></div></div>
+
+    <!-- MANUAL / AUTO-FILLED FIELDS -->
+    <div class="form-row one"><div class="fg"><label>Product Name</label><input type="text" id="ap-name" placeholder="Auto-filled from scan or type manually"></div></div>
     <div class="form-row"><div class="fg"><label>Expiry Date</label><input type="date" id="ap-exp"></div><div class="fg"><label>Quantity</label><input type="number" id="ap-qty" value="1" min="1"></div></div>
     <div class="form-row one"><div class="fg"><label>Category</label><select id="ap-cat"><option>Chicken</option><option>Sauces</option><option>Sides</option><option>Beverages</option><option>Packaging</option><option>Other</option></select></div></div>
     <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="addProduct()">✅ Add Product</button>
@@ -499,20 +523,54 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <!-- ORDERS -->
     <div class="page" id="page-orders">
       <div class="card">
-        <div class="card-title">📄 Upload Previous Order / Inventory Sheet</div>
-        <p style="font-size:13px;color:var(--light);margin-bottom:16px">Upload your Sysco order sheet or current inventory document (PDF, image, or spreadsheet) to automatically generate a suggested order list.</p>
-        <div class="upload-zone" id="ord-upload-zone">
-          <input type="file" id="ord-file-input" accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.txt" onchange="handleOrderUpload(this.files[0])">
-          <div class="uz-icon">📋</div>
-          <p>Drop your order/inventory document here</p>
-          <small>Supports: PDF, Image (JPG/PNG), CSV, Excel, Text</small>
+        <div class="card-title">📄 Scan / Upload Inventory Sheet → Auto-Generate Sysco Order</div>
+        <p style="font-size:13px;color:var(--light);margin-bottom:14px">Scan or upload your current inventory sheet, previous Sysco order, or any product list. The system will read it and calculate what to order.</p>
+
+        <!-- Upload / Camera buttons -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <label style="flex:1;min-width:130px;cursor:pointer">
+            <input type="file" id="ord-camera-input" accept="image/*" capture="environment" style="display:none" onchange="handleOrderUpload(this.files[0])">
+            <div class="btn btn-w" style="width:100%;justify-content:center;pointer-events:none">📷 Scan with Camera</div>
+          </label>
+          <label style="flex:1;min-width:130px;cursor:pointer">
+            <input type="file" id="ord-file-input" accept=".png,.jpg,.jpeg,.csv,.txt" style="display:none" onchange="handleOrderUpload(this.files[0])">
+            <div class="btn btn-g" style="width:100%;justify-content:center;pointer-events:none">🖼️ Upload Image / CSV</div>
+          </label>
+          <button class="btn btn-g" id="ord-clear-btn" onclick="clearOrderScan()" style="display:none">✕ Clear</button>
         </div>
-        <div id="ord-upload-status" style="margin-bottom:12px"></div>
-        <div class="card-title" style="margin-top:8px">🛒 Sysco Order Planning</div>
+
+        <!-- Drop zone -->
+        <div class="upload-zone" id="ord-upload-zone" style="padding:18px;margin-bottom:0">
+          <div class="uz-icon" style="font-size:28px;margin-bottom:6px">📋</div>
+          <p style="font-size:13px">Or drop an image / CSV file here</p>
+          <small>Camera scan · JPG · PNG · CSV · TXT</small>
+        </div>
+
+        <!-- Preview -->
+        <div id="ord-img-preview" style="display:none;margin-top:12px">
+          <img id="ord-preview-img" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:contain;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.3)">
+        </div>
+
+        <!-- OCR Progress -->
+        <div id="ord-progress-wrap" style="display:none;margin-top:14px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:12px;color:var(--light)" id="ord-progress-label">Reading document…</span>
+            <span style="font-size:12px;color:var(--gold);font-weight:700" id="ord-progress-pct">0%</span>
+          </div>
+          <div style="height:6px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+            <div id="ord-progress-bar" style="height:100%;width:0%;background:var(--gold);border-radius:3px;transition:width .25s"></div>
+          </div>
+        </div>
+
+        <div id="ord-upload-status" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🛒 Sysco Order</div>
         <div id="ord-info" style="margin-bottom:16px"></div>
         <div class="order-grid" id="ord-list"></div>
         <div style="margin-top:20px;display:flex;gap:12px;flex-wrap:wrap">
-          <button class="btn btn-p" onclick="genOrder()">⚡ Suggest Order</button>
+          <button class="btn btn-p" onclick="genOrder()">⚡ Reset to Defaults</button>
           <button class="btn btn-g" onclick="saveOrder()">💾 Save Order</button>
         </div>
       </div>
@@ -679,7 +737,13 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(zone){
     zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
     zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
-    zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');const f=e.dataTransfer.files[0];if(f) handleOrderUpload(f);});
+    zone.addEventListener('drop',e=>{
+      e.preventDefault();zone.classList.remove('drag');
+      const f=e.dataTransfer.files[0];
+      if(f) handleOrderUpload(f);
+    });
+    // Also make clicking the zone trigger the file input
+    zone.addEventListener('click',()=>document.getElementById('ord-file-input').click());
   }
 });
 
@@ -1631,173 +1695,356 @@ async function autoSchedule() {
 }
 
 // ── PRODUCT LABEL SCANNER ────────────────────────
+// ── PRODUCT LABEL SCANNER (Tesseract.js — 100% free, no API) ────────────────
+
+// KFC product catalogue for fuzzy name matching
+const KFC_PRODUCTS = [
+  { name:'Whole Chicken',        keywords:['whole chicken','roaster','raw chicken','fresh chicken'],          category:'Chicken'   },
+  { name:'Chicken Breast',       keywords:['breast','chicken breast','boneless breast','breast fillet'],       category:'Chicken'   },
+  { name:'Chicken Wings',        keywords:['wing','wings','chicken wing'],                                     category:'Chicken'   },
+  { name:'Chicken Tenders',      keywords:['tender','tenders','strip','strips','chicken tender','chicken strip'],category:'Chicken'  },
+  { name:'Chicken Thighs',       keywords:['thigh','thighs','chicken thigh'],                                  category:'Chicken'   },
+  { name:'Chicken Legs',         keywords:['leg','legs','drumstick','drumsticks'],                             category:'Chicken'   },
+  { name:'Ground Beef',          keywords:['ground beef','beef','hamburger'],                                  category:'Chicken'   },
+  { name:'Frying Oil',           keywords:['frying oil','canola oil','vegetable oil','shortening','oil'],      category:'Sides'     },
+  { name:'Batter Mix',           keywords:['batter','batter mix','coating','flour mix','seasoned flour'],      category:'Sides'     },
+  { name:'Gravy Mix',            keywords:['gravy','gravy mix','brown gravy','sauce mix'],                     category:'Sauces'    },
+  { name:'Coleslaw Mix',         keywords:['coleslaw','slaw','cole slaw','cabbage mix'],                       category:'Sides'     },
+  { name:'Poutine Fries',        keywords:['fries','poutine','french fries','potato','frozen fries'],          category:'Sides'     },
+  { name:'Sandwich Buns',        keywords:['bun','buns','sandwich bun','roll','bread roll','brioche'],         category:'Sides'     },
+  { name:'Ketchup',              keywords:['ketchup','tomato sauce','catsup'],                                 category:'Sauces'    },
+  { name:'Mayonnaise',           keywords:['mayo','mayonnaise','hellmann'],                                    category:'Sauces'    },
+  { name:'BBQ Sauce',            keywords:['bbq','barbeque','barbecue sauce'],                                 category:'Sauces'    },
+  { name:'Hot Sauce',            keywords:['hot sauce','sriracha','frank','tabasco','chili sauce'],            category:'Sauces'    },
+  { name:'Drink Cups',           keywords:['cup','cups','drink cup','beverage cup','large cup','medium cup'],  category:'Packaging' },
+  { name:'Napkins',              keywords:['napkin','napkins','tissue','serviette'],                           category:'Packaging' },
+  { name:'Takeout Bags',         keywords:['bag','bags','takeout bag','paper bag','carry bag'],                category:'Packaging' },
+  { name:'Food Containers',      keywords:['container','box','chicken box','meal box','bucket'],               category:'Packaging' },
+  { name:'Plastic Lids',         keywords:['lid','lids','plastic lid','cup lid'],                             category:'Packaging' },
+  { name:'Straws',               keywords:['straw','straws'],                                                 category:'Packaging' },
+  { name:'Pepsi',                keywords:['pepsi','diet pepsi','pepsi cola'],                                 category:'Beverages' },
+  { name:'7UP',                  keywords:['7up','seven up','sprite'],                                        category:'Beverages' },
+  { name:'Mountain Dew',         keywords:['mountain dew','mtn dew'],                                        category:'Beverages' },
+  { name:'Lipton Iced Tea',      keywords:['lipton','iced tea','tea'],                                        category:'Beverages' },
+  { name:'Salt',                 keywords:['salt','sodium chloride','table salt'],                            category:'Sides'     },
+  { name:'Pepper',               keywords:['pepper','black pepper','ground pepper'],                          category:'Sides'     },
+  { name:'Seasoning Mix',        keywords:['seasoning','spice mix','herbs','11 herbs','original recipe'],      category:'Sides'     },
+];
+
+// Month name → number mapping for date parsing
+const MONTH_MAP = {
+  jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12,
+  january:1,february:2,march:3,april:4,june:6,july:7,august:8,september:9,october:10,november:11,december:12
+};
+
+function clearScan() {
+  document.getElementById('scan-preview').style.display = 'none';
+  document.getElementById('scan-status').innerHTML = '';
+  document.getElementById('scan-chips').innerHTML = '';
+  document.getElementById('scan-progress-wrap').style.display = 'none';
+  document.getElementById('scan-clear-btn').style.display = 'none';
+  document.getElementById('prod-camera-input').value = '';
+  document.getElementById('prod-photo-input').value = '';
+}
+
+// ── Main scanner entry point ──────────────────────────────────────────────────
 async function scanProductLabel(file) {
   if (!file) return;
-  const statusEl  = document.getElementById('scan-status');
-  const previewEl = document.getElementById('scan-preview');
-  const imgEl     = document.getElementById('scan-img');
 
+  const statusEl   = document.getElementById('scan-status');
+  const previewEl  = document.getElementById('scan-preview');
+  const imgEl      = document.getElementById('scan-img');
+  const progressW  = document.getElementById('scan-progress-wrap');
+  const progressB  = document.getElementById('scan-progress-bar');
+  const progressL  = document.getElementById('scan-progress-label');
+  const progressP  = document.getElementById('scan-progress-pct');
+  const chipsEl    = document.getElementById('scan-chips');
+  const clearBtn   = document.getElementById('scan-clear-btn');
+
+  // Reset UI
   statusEl.style.color = 'var(--light)';
-  statusEl.innerHTML = '⏳ Loading image…';
-  previewEl.style.display = 'block';
+  statusEl.innerHTML   = '⏳ Loading image…';
+  chipsEl.innerHTML    = '';
+  progressW.style.display = 'block';
+  progressB.style.width   = '0%';
+  progressL.textContent   = 'Loading image…';
+  progressP.textContent   = '0%';
+  clearBtn.style.display  = 'none';
 
   try {
-    // ── Step 1: Read & compress the image ──────────────────────────────
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = e => resolve(e.target.result);
-      reader.onerror = () => reject(new Error('Could not read file'));
-      reader.readAsDataURL(file);
+    // ── Step 1: Read file and show preview ──────────────────────────────
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload  = e => res(e.target.result);
+      r.onerror = () => rej(new Error('Could not read file'));
+      r.readAsDataURL(file);
     });
 
     imgEl.src = dataUrl;
+    previewEl.style.display = 'block';
 
-    // Compress to max 1200px wide and JPEG 0.85 to keep payload small
-    const compressed = await new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1200;
-        let w = img.width, h = img.height;
-        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.85));
-      };
-      img.onerror = () => reject(new Error('Image decode failed'));
-      img.src = dataUrl;
-    });
+    // ── Step 2: Pre-process image on canvas for better OCR ──────────────
+    // Resize to max 2000px, convert to grayscale, boost contrast
+    progressL.textContent = 'Pre-processing image…';
+    progressB.style.width = '10%';
+    progressP.textContent = '10%';
 
-    const base64    = compressed.split(',')[1];
-    const mediaType = 'image/jpeg'; // always jpeg after canvas compression
+    const processedDataUrl = await preprocessImageForOCR(dataUrl);
 
-    statusEl.innerHTML = '🤖 AI is reading the label…';
+    // ── Step 3: Run Tesseract OCR ───────────────────────────────────────
+    progressL.textContent = 'Starting OCR engine (first run downloads ~10MB)…';
+    progressB.style.width = '15%';
+    progressP.textContent = '15%';
+    statusEl.innerHTML    = '🔍 Reading text from image…';
 
-    // ── Step 2: Call Claude API ─────────────────────────────────────────
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-6',
-        max_tokens: 512,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: base64 }
-            },
-            {
-              type: 'text',
-              text: `You are a food inventory assistant for a KFC restaurant (store 1416).
-
-Look at this image carefully. It may be a product label, box, bag, container lid, or date sticker on food packaging.
-
-Extract the following and respond with ONLY a raw JSON object (no markdown, no explanation):
-{
-  "name": "the product name — e.g. Chicken Breast, Frying Oil, Coleslaw Mix, Gravy Mix, Poutine Fries, Sandwich Buns, Batter Mix, Napkins, Drink Cups, Ketchup Packets",
-  "expiry": "best-before or expiry date in YYYY-MM-DD format — look for text like BB, Best Before, Exp, Use By, BBD, or a date stamp",
-  "category": "one of: Chicken, Sauces, Sides, Beverages, Packaging, Other"
-}
-
-Rules:
-- If you can only read part of the date (e.g. month and year but not day), use day 01 (e.g. "2026-05-01")
-- If the date is in DD/MM/YY format, convert it correctly to YYYY-MM-DD
-- If you cannot find a field, use null for that field
-- Never refuse — always try your best even if the image is slightly blurry
-- Do NOT wrap in markdown code blocks`
-            }
-          ]
-        }]
-      })
-    });
-
-    // ── Step 3: Parse response ──────────────────────────────────────────
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('API error response:', errText);
-      throw new Error(`API ${response.status}: ${errText.slice(0,120)}`);
-    }
-
-    const data = await response.json();
-    console.log('Scan API raw response:', data);
-
-    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-
-    const rawText = (data.content || [])
-      .filter(c => c.type === 'text')
-      .map(c => c.text)
-      .join('')
-      .trim();
-
-    console.log('Scan raw text:', rawText);
-
-    // Strip any accidental markdown fences
-    const cleaned = rawText.replace(/^```[\w]*\n?/,'').replace(/\n?```$/,'').trim();
-
-    let parsed = null;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (jsonErr) {
-      // Try to extract JSON object from text if model added extra words
-      const match = cleaned.match(/\{[\s\S]*\}/);
-      if (match) {
-        try { parsed = JSON.parse(match[0]); } catch { /* still null */ }
+    const { data: { text } } = await Tesseract.recognize(
+      processedDataUrl,
+      'eng',
+      {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            const pct = Math.round(15 + m.progress * 75);
+            progressB.style.width = pct + '%';
+            progressP.textContent = pct + '%';
+            progressL.textContent = 'Recognising text… ' + Math.round(m.progress * 100) + '%';
+          } else if (m.status === 'loading tesseract core') {
+            progressL.textContent = 'Loading OCR engine…';
+            progressB.style.width = '20%';
+          } else if (m.status === 'initializing api') {
+            progressL.textContent = 'Initialising…';
+            progressB.style.width = '25%';
+          }
+        }
       }
-    }
+    );
 
-    if (!parsed) {
-      console.error('Could not parse JSON from:', cleaned);
-      statusEl.style.color = '#ff6b6b';
-      statusEl.innerHTML = `⚠️ AI responded but result wasn't readable. Try again or enter manually.<br><small style="color:var(--mid)">${cleaned.slice(0,100)}</small>`;
+    progressB.style.width = '95%';
+    progressP.textContent = '95%';
+    progressL.textContent = 'Analysing text…';
+
+    console.log('OCR raw text:\n', text);
+
+    if (!text || text.trim().length < 3) {
+      statusEl.style.color = 'var(--gold)';
+      statusEl.innerHTML   = '⚠️ No text detected. Try a clearer, closer, better-lit photo.';
+      progressW.style.display = 'none';
+      clearBtn.style.display = 'inline-flex';
       return;
     }
 
-    // ── Step 4: Fill form fields ────────────────────────────────────────
-    let found = [];
+    // ── Step 4: Parse the OCR text ──────────────────────────────────────
+    const expiry  = extractExpiryDate(text);
+    const product = matchProductName(text);
 
-    if (parsed.name && parsed.name !== 'null') {
-      document.getElementById('ap-name').value = parsed.name;
-      found.push(`Product: <strong>${parsed.name}</strong>`);
-    }
+    progressB.style.width = '100%';
+    progressP.textContent = '100%';
+    setTimeout(() => { progressW.style.display = 'none'; }, 600);
 
-    if (parsed.expiry && parsed.expiry !== 'null') {
-      // Validate it looks like a date
-      if (/^\d{4}-\d{2}-\d{2}$/.test(parsed.expiry)) {
-        document.getElementById('ap-exp').value = parsed.expiry;
-        found.push(`Expiry: <strong>${parsed.expiry}</strong>`);
-      }
-    }
+    // ── Step 5: Fill form fields ────────────────────────────────────────
+    const found = [];
 
-    if (parsed.category && parsed.category !== 'null') {
+    if (product) {
+      document.getElementById('ap-name').value = product.name;
+      // Set category
       const sel = document.getElementById('ap-cat');
       for (let i = 0; i < sel.options.length; i++) {
-        if (sel.options[i].value.toLowerCase() === parsed.category.toLowerCase()) {
-          sel.selectedIndex = i;
-          found.push(`Category: <strong>${parsed.category}</strong>`);
-          break;
-        }
+        if (sel.options[i].value === product.category) { sel.selectedIndex = i; break; }
       }
+      found.push({ label: '📦 Product', value: product.name, color: 'var(--gold)' });
+      found.push({ label: '🏷️ Category', value: product.category, color: 'var(--blue)' });
     }
 
-    if (found.length === 0) {
-      statusEl.style.color = 'var(--gold)';
-      statusEl.innerHTML = '⚠️ Scan complete but no fields detected. Try a clearer photo closer to the label.';
-    } else {
-      statusEl.style.color = 'var(--green)';
-      statusEl.innerHTML = '✅ ' + found.join(' &nbsp;·&nbsp; ');
+    if (expiry) {
+      document.getElementById('ap-exp').value = expiry;
+      found.push({ label: '📅 Expiry', value: expiry, color: 'var(--green)' });
     }
+
+    // ── Step 6: Render result chips ─────────────────────────────────────
+    if (found.length > 0) {
+      statusEl.style.color = '#4ade80';
+      statusEl.innerHTML   = `✅ Scan complete — ${found.length} field${found.length>1?'s':''} detected. Review below and adjust if needed.`;
+      chipsEl.innerHTML = found.map(f =>
+        `<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:5px 12px;font-size:12px">
+          <span style="color:var(--mid)">${f.label}:</span>
+          <strong style="color:${f.color};margin-left:4px">${f.value}</strong>
+        </div>`
+      ).join('');
+    } else {
+      statusEl.style.color = 'var(--gold)';
+      statusEl.innerHTML   = `⚠️ Text was read but no product name or date found.<br>
+        <span style="font-size:11px;color:var(--mid)">OCR text: "${text.replace(/\n/g,' ').slice(0,120)}…"</span><br>
+        <span style="font-size:12px;color:var(--light)">Try a closer photo of the label or date sticker, then fill in manually.</span>`;
+    }
+
+    clearBtn.style.display = 'inline-flex';
 
   } catch (err) {
     console.error('scanProductLabel error:', err);
     statusEl.style.color = '#ff6b6b';
-    statusEl.innerHTML = `❌ Error: ${err.message}. Check console for details.`;
+    statusEl.innerHTML   = `❌ OCR failed: ${err.message}`;
+    progressW.style.display = 'none';
+    clearBtn.style.display  = 'inline-flex';
   }
+}
+
+// ── Image pre-processing: resize + grayscale + contrast boost ────────────────
+function preprocessImageForOCR(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      // Resize: max 2400px on longest side (larger = better OCR accuracy)
+      const MAX = 2400;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w === 0 || h === 0) { reject(new Error('Image has zero dimensions')); return; }
+      if (Math.max(w, h) > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else       { w = Math.round(w * MAX / h); h = MAX; }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+
+      // White background (helps with transparent PNGs)
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+
+      // Grayscale + contrast boost via pixel manipulation
+      const imageData = ctx.getImageData(0, 0, w, h);
+      const d = imageData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        // Grayscale
+        const gray = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+        // Contrast: stretch to 0–255 with a curve (makes text darker, background lighter)
+        const contrast = 1.4;
+        const boosted  = Math.min(255, Math.max(0, contrast * (gray - 128) + 128));
+        d[i] = d[i+1] = d[i+2] = boosted;
+      }
+      ctx.putImageData(imageData, 0, 0);
+
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('Could not decode image'));
+    img.src = dataUrl;
+  });
+}
+
+// ── Expiry date extractor ─────────────────────────────────────────────────────
+// Handles: BB 26 APR 2026 | 2026-04-26 | 26/04/26 | APR 26 2026 | BB: 26 Apr 26 | 04/2026
+function extractExpiryDate(text) {
+  // Normalise text: collapse whitespace, uppercase
+  const t = text.replace(/\s+/g, ' ').toUpperCase();
+
+  const currentYear = new Date().getFullYear();
+  const patterns = [];
+
+  // ── Pattern 1: ISO  YYYY-MM-DD  or  YYYY/MM/DD
+  patterns.push({ re: /(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/g,
+    parse: m => ({ y: +m[1], mo: +m[2], d: +m[3] }) });
+
+  // ── Pattern 2: DD/MM/YYYY  or  DD-MM-YYYY  or  DD.MM.YYYY
+  patterns.push({ re: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/g,
+    parse: m => ({ y: +m[3], mo: +m[2], d: +m[1] }) });
+
+  // ── Pattern 3: DD/MM/YY  or  DD-MM-YY  (2-digit year)
+  patterns.push({ re: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})\b/g,
+    parse: m => {
+      const yy = +m[3];
+      return { y: yy + (yy < 50 ? 2000 : 1900), mo: +m[2], d: +m[1] };
+    }});
+
+  // ── Pattern 4: DD MON YYYY  or  DD MON YY  (e.g. 26 APR 2026 or 26 APR 26)
+  patterns.push({ re: /(\d{1,2})\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?\s+(\d{2,4})/g,
+    parse: m => {
+      const yy = +m[3];
+      return { y: yy < 100 ? (yy + (yy < 50 ? 2000 : 1900)) : yy,
+               mo: MONTH_MAP[m[2].slice(0,3).toLowerCase()], d: +m[1] };
+    }});
+
+  // ── Pattern 5: MON DD YYYY  (e.g. APR 26 2026)
+  patterns.push({ re: /(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?\s+(\d{1,2})[,\s]+(\d{2,4})/g,
+    parse: m => {
+      const yy = +m[3];
+      return { y: yy < 100 ? (yy + (yy < 50 ? 2000 : 1900)) : yy,
+               mo: MONTH_MAP[m[1].slice(0,3).toLowerCase()], d: +m[2] };
+    }});
+
+  // ── Pattern 6: MM/YYYY  or  MON/YYYY  (month + year only → use day 01)
+  patterns.push({ re: /(\d{1,2})[\/\-](\d{4})\b/g,
+    parse: m => ({ y: +m[2], mo: +m[1], d: 1 }) });
+
+  // ── Pattern 7: MON YYYY  (e.g. APR 2026)
+  patterns.push({ re: /(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\.?\s+(\d{4})/g,
+    parse: m => ({ y: +m[2], mo: MONTH_MAP[m[1].slice(0,3).toLowerCase()], d: 1 }) });
+
+  const candidates = [];
+
+  for (const { re, parse } of patterns) {
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(t)) !== null) {
+      try {
+        const parsed = parse(m);
+        if (!parsed) continue;
+        const { y, mo, d } = parsed;
+        // Sanity check
+        if (y < currentYear || y > currentYear + 10) continue;
+        if (mo < 1 || mo > 12) continue;
+        if (d  < 1 || d  > 31) continue;
+        const dateStr = `${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        // Verify it's a real date
+        const dt = new Date(dateStr + 'T00:00:00');
+        if (isNaN(dt.getTime())) continue;
+        // Prefer dates that follow keywords like BB, BEST BEFORE, EXP, USE BY
+        const posInText = m.index;
+        const before    = t.slice(Math.max(0, posInText - 30), posInText);
+        const priority  = /BB|BEST\s*BEFORE|EXP|USE\s*BY|BBD|SELL\s*BY|USE\s*BEFORE|PEREMPTION/.test(before) ? 0 : 1;
+        candidates.push({ dateStr, priority, pos: posInText });
+      } catch { /* skip bad parse */ }
+    }
+  }
+
+  if (!candidates.length) return null;
+
+  // Sort: keyword-prefixed first, then by position in text (dates near "BB" label win)
+  candidates.sort((a, b) => a.priority - b.priority || a.pos - b.pos);
+  console.log('Expiry candidates:', candidates);
+  return candidates[0].dateStr;
+}
+
+// ── Product name matcher ──────────────────────────────────────────────────────
+function matchProductName(ocrText) {
+  const lower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+
+  // Score each known product
+  let bestScore  = 0;
+  let bestMatch  = null;
+
+  for (const prod of KFC_PRODUCTS) {
+    let score = 0;
+    for (const kw of prod.keywords) {
+      if (lower.includes(kw)) {
+        // Longer keyword match = higher score
+        score = Math.max(score, kw.length * 2);
+      } else {
+        // Partial word match — check each word of keyword
+        const words = kw.split(' ');
+        const matchedWords = words.filter(w => w.length > 3 && lower.includes(w));
+        if (matchedWords.length > 0) {
+          score = Math.max(score, matchedWords.reduce((s,w) => s + w.length, 0));
+        }
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = prod;
+    }
+  }
+
+  // Require a minimum match confidence
+  return bestScore >= 5 ? bestMatch : null;
 }
 
 // ── PRODUCTS ────────────────────────────────────
@@ -1830,123 +2077,209 @@ async function delProd(id) {
   } catch(e){ toast('Error: '+e.message,'error'); }
 }
 
-// ── ORDER DOCUMENT UPLOAD ────────────────────────
+// ── ORDER INVENTORY SCANNER (Tesseract.js — 100% free, no API) ──────────────
+
+// Sysco item catalogue with keywords, base qty, unit, and par (min acceptable stock)
+const SYSCO_CATALOGUE = [
+  { n:'Whole Chicken',   u:'case',   b:10, par:3, keys:['whole chicken','roaster','raw chicken','fresh chicken','poulet entier'] },
+  { n:'Chicken Breast',  u:'case',   b:8,  par:2, keys:['breast','chicken breast','boneless breast','breast fillet','poitrine'] },
+  { n:'Chicken Wings',   u:'case',   b:6,  par:2, keys:['wing','wings','chicken wing','aile'] },
+  { n:'Chicken Tenders', u:'case',   b:5,  par:2, keys:['tender','tenders','strip','strips','chicken tender','laniere'] },
+  { n:'Chicken Thighs',  u:'case',   b:4,  par:1, keys:['thigh','thighs','cuisse'] },
+  { n:'Coleslaw Mix',    u:'bag',    b:4,  par:1, keys:['coleslaw','slaw','cole slaw','cabbage mix','salade de chou'] },
+  { n:'Frying Oil',      u:'jug',    b:3,  par:1, keys:['frying oil','canola oil','vegetable oil','shortening','huile'] },
+  { n:'Batter Mix',      u:'bag',    b:4,  par:1, keys:['batter','batter mix','coating','flour mix','seasoned flour','panure'] },
+  { n:'Sandwich Buns',   u:'pack',   b:6,  par:2, keys:['bun','buns','sandwich bun','roll','bread roll','brioche','pain'] },
+  { n:'Poutine Fries',   u:'case',   b:4,  par:1, keys:['fries','poutine','french fries','potato','frozen fries','frites'] },
+  { n:'Gravy Mix',       u:'bag',    b:3,  par:1, keys:['gravy','gravy mix','brown gravy','sauce mix'] },
+  { n:'Drink Cups',      u:'sleeve', b:5,  par:1, keys:['cup','cups','drink cup','beverage cup','large cup','medium cup','gobelet'] },
+  { n:'Napkins',         u:'pack',   b:4,  par:1, keys:['napkin','napkins','tissue','serviette'] },
+  { n:'Ketchup Packets', u:'box',    b:4,  par:1, keys:['ketchup','tomato sauce','catsup','ketchup packet'] },
+  { n:'Mayonnaise',      u:'tub',    b:3,  par:1, keys:['mayo','mayonnaise','hellmann'] },
+  { n:'Salt Sachets',    u:'box',    b:3,  par:1, keys:['salt','sodium','sel','salt sachet','salt packet'] },
+  { n:'Pepper Sachets',  u:'box',    b:2,  par:1, keys:['pepper','black pepper','poivre','pepper packet'] },
+  { n:'BBQ Sauce',       u:'tub',    b:3,  par:1, keys:['bbq','barbeque','barbecue sauce','sauce bbq'] },
+  { n:'Plastic Lids',    u:'pack',   b:3,  par:1, keys:['lid','lids','plastic lid','cup lid','couvercle'] },
+  { n:'Takeout Bags',    u:'pack',   b:4,  par:1, keys:['bag','bags','takeout bag','paper bag','carry bag','sac'] },
+];
+
+function clearOrderScan() {
+  document.getElementById('ord-img-preview').style.display = 'none';
+  document.getElementById('ord-upload-status').innerHTML = '';
+  document.getElementById('ord-progress-wrap').style.display = 'none';
+  document.getElementById('ord-clear-btn').style.display = 'none';
+  document.getElementById('ord-file-input').value = '';
+  const camInput = document.getElementById('ord-camera-input');
+  if (camInput) camInput.value = '';
+}
+
 async function handleOrderUpload(file) {
   if (!file) return;
-  const statusEl = document.getElementById('ord-upload-status');
-  statusEl.innerHTML = `<div class="alert-b">⏳ Reading document: <strong>${file.name}</strong>...</div>`;
+
+  const statusEl   = document.getElementById('ord-upload-status');
+  const progressW  = document.getElementById('ord-progress-wrap');
+  const progressB  = document.getElementById('ord-progress-bar');
+  const progressL  = document.getElementById('ord-progress-label');
+  const progressP  = document.getElementById('ord-progress-pct');
+  const previewDiv = document.getElementById('ord-img-preview');
+  const previewImg = document.getElementById('ord-preview-img');
+  const clearBtn   = document.getElementById('ord-clear-btn');
+
+  statusEl.innerHTML = '';
+  progressW.style.display = 'none';
+  clearBtn.style.display  = 'none';
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  let extractedText = '';
+
   try {
-    const ext = file.name.split('.').pop().toLowerCase();
-    let contentBlock;
-
     if (ext === 'txt' || ext === 'csv') {
-      const text = await file.text();
-      contentBlock = { type: 'text', text };
-    } else if (['png','jpg','jpeg','pdf'].includes(ext)) {
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = () => res(r.result.split(',')[1]);
-        r.onerror = () => rej(new Error('Read failed'));
-        r.readAsDataURL(file);
+      progressW.style.display = 'block';
+      progressB.style.width = '60%'; progressL.textContent = 'Reading text file…'; progressP.textContent = '60%';
+      previewDiv.style.display = 'none';
+      extractedText = await file.text();
+      progressB.style.width = '100%'; progressP.textContent = '100%';
+      setTimeout(() => progressW.style.display = 'none', 400);
+
+    } else if (['png','jpg','jpeg','gif','webp','bmp'].includes(ext)) {
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = () => rej(new Error('Cannot read file')); r.readAsDataURL(file);
       });
-      const mediaType = ext === 'pdf' ? 'application/pdf' : `image/${ext === 'jpg' ? 'jpeg' : ext}`;
-      contentBlock = ext === 'pdf'
-        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-        : { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } };
-    } else {
-      statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Unsupported file type. Use PDF, image, CSV, or text.</div>`;
-      return;
-    }
+      previewImg.src = dataUrl; previewDiv.style.display = 'block';
+      progressW.style.display = 'block'; progressB.style.width = '5%'; progressL.textContent = 'Pre-processing image…'; progressP.textContent = '5%';
+      statusEl.innerHTML = `<div class="alert-b">🔍 Reading inventory document with OCR…</div>`;
 
-    statusEl.innerHTML = `<div class="alert-b">🤖 AI analyzing inventory — generating Sysco order list...</div>`;
+      const processed = await preprocessImageForOCR(dataUrl);
+      progressB.style.width = '15%'; progressL.textContent = 'Starting OCR engine…'; progressP.textContent = '15%';
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        messages: [{ role: 'user', content: [
-          contentBlock,
-          { type: 'text', text: `This is a KFC store inventory or order sheet. Based on what you see (current stock levels, quantities on hand, items listed), generate a recommended Sysco order.
+      const { data: { text } } = await Tesseract.recognize(processed, 'eng', {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            const pct = Math.round(15 + m.progress * 75);
+            progressB.style.width = pct + '%'; progressP.textContent = pct + '%';
+            progressL.textContent = 'Scanning document… ' + Math.round(m.progress * 100) + '%';
+          } else if (m.status === 'loading tesseract core') {
+            progressL.textContent = 'Loading OCR engine (first time ~10MB)…';
+          }
+        }
+      });
 
-Rules:
-- If an item has LOW stock (≤2 units) or is missing → order MORE (base quantity × 1.5, rounded up)
-- If an item has MEDIUM stock (3–5 units) → order base quantity
-- If an item has HIGH stock (≥6 units) → reduce order by 30%
-- If item is not in the document → use base quantity
+      progressB.style.width = '95%'; progressP.textContent = '95%';
+      extractedText = text;
+      console.log('Order OCR raw text:\n', text);
 
-KFC standard Sysco items and their base order quantities:
-Whole Chicken: 10 cases, Chicken Breast: 8 cases, Chicken Wings: 6 cases, Chicken Tenders: 5 cases,
-Coleslaw Mix: 4 bags, Frying Oil: 3 jugs, Batter Mix: 4 bags, Sandwich Buns: 6 packs,
-Poutine Fries: 4 cases, Gravy Mix: 3 bags, Drink Cups: 5 sleeves, Napkins: 4 packs,
-Salt & Pepper Sachets: 3 boxes, Ketchup Packets: 4 boxes, Mayonnaise: 3 tubs
-
-Return ONLY a JSON array of objects. Each object: {"item":"name","qty":number,"unit":"unit","reason":"short reason"}
-No markdown, no extra text.` }
-        ]}]
-      })
-    });
-
-    const data = await res.json();
-    const rawText = data.content?.map(c => c.text || '').join('').replace(/```json|```/g,'').trim();
-    let orderList = [];
-    try { orderList = JSON.parse(rawText); } catch { orderList = []; }
-
-    if (!orderList.length) {
-      statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">⚠️ Could not generate order from document. Please check the file and try again.</div>`;
-      return;
-    }
-
-    // Update ordQty from AI result
-    orderList.forEach(o => {
-      const match = ORDS.find(r => r.n.toLowerCase().includes(o.item?.toLowerCase()?.split(' ')[0]) || o.item?.toLowerCase()?.includes(r.n.toLowerCase().split(' ')[0]));
-      if (match) {
-        ordQty[match.n] = o.qty;
-        const el = document.getElementById('oq-' + match.n.replace(/\W/g,'-'));
-        if (el) el.textContent = o.qty;
+      if (!extractedText.trim()) {
+        progressW.style.display = 'none';
+        statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">⚠️ No text detected. Try a clearer, better-lit photo of the inventory sheet.</div>`;
+        clearBtn.style.display = 'inline-flex'; return;
       }
+    } else {
+      statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Unsupported format. Use JPG, PNG, CSV or TXT.</div>`; return;
+    }
+
+    progressB.style.width = '98%'; progressL.textContent = 'Analysing inventory…'; progressP.textContent = '98%';
+
+    const inventoryFound = parseInventoryText(extractedText);
+    console.log('Parsed inventory:', inventoryFound);
+    setTimeout(() => progressW.style.display = 'none', 500);
+
+    const orderResult = generateSyscoOrder(inventoryFound);
+
+    let updatedCount = 0;
+    orderResult.forEach(r => {
+      ordQty[r.n] = r.orderQty;
+      const el = document.getElementById('oq-' + r.n.replace(/\W/g,'-'));
+      if (el) el.textContent = r.orderQty;
+      if (r.found) updatedCount++;
     });
 
-    // Render the AI-generated order list summary
-    const summaryHtml = orderList.map(o => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;margin-bottom:8px">
-        <div>
-          <div style="font-weight:600;color:var(--lighter);font-size:14px">${o.item || '—'}</div>
-          <div style="font-size:11px;color:var(--light);margin-top:2px">${o.reason || ''}</div>
-        </div>
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;color:var(--gold)">${o.qty} <span style="font-size:12px;font-weight:400;color:var(--light)">${o.unit || ''}</span></div>
-      </div>`).join('');
+    // Also set defaults for items not in orderResult (those with qty=0 were filtered)
+    ORDS.forEach(o => { if (ordQty[o.n] === undefined) ordQty[o.n] = o.b; });
 
-    statusEl.innerHTML = `
-      <div class="alert-b" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);color:#4ade80;margin-bottom:12px">
-        ✅ AI generated Sysco order from <strong>${file.name}</strong> — ${orderList.length} items. Quantities updated below.
-      </div>
-      <div style="margin-bottom:8px">
-        <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:var(--white);margin-bottom:12px">📋 AI-Generated Sysco Order</div>
-        ${summaryHtml}
-      </div>`;
-
-    // Re-render order grid too
     document.getElementById('ord-list').innerHTML = ORDS.map(o => `
       <div class="order-item">
         <div><div style="font-weight:500;color:var(--lighter)">${o.n}</div><div style="font-size:11px;color:var(--light)">${o.u}</div></div>
         <div class="oqty">
           <button class="qbtn" onclick="adjQ('${o.n}',-1)">−</button>
-          <div style="min-width:32px;text-align:center;font-weight:600" id="oq-${o.n.replace(/\W/g,'-')}">${ordQty[o.n] || o.b}</div>
+          <div style="min-width:32px;text-align:center;font-weight:600" id="oq-${o.n.replace(/\W/g,'-')}">${ordQty[o.n] !== undefined ? ordQty[o.n] : o.b}</div>
           <button class="qbtn" onclick="adjQ('${o.n}',1)">+</button>
         </div>
       </div>`).join('');
 
-  } catch (e) {
-    console.error('Order upload error:', e);
-    statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Error: ${e.message}</div>`;
+    const summaryRows = orderResult.map(r => {
+      const levelColor = r.stockLevel==='low'?'var(--red)':r.stockLevel==='medium'?'var(--gold)':r.stockLevel==='ok'?'var(--green)':'var(--light)';
+      const levelLabel = r.stockLevel==='low'?'🔴 Low stock':r.stockLevel==='medium'?'🟡 Medium':r.stockLevel==='ok'?'🟢 Well stocked':'⚪ Not found — using default';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;margin-bottom:6px;gap:8px;flex-wrap:wrap">
+        <div style="flex:1;min-width:100px"><div style="font-weight:600;color:var(--lighter);font-size:13px">${r.n}</div>
+        <div style="font-size:11px;margin-top:2px;color:${levelColor}">${levelLabel}${r.currentQty!==null?` (found: ${r.currentQty} ${r.u})`:''}</div></div>
+        <div style="text-align:right"><div style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:var(--gold)">${r.orderQty} <span style="font-size:11px;font-weight:400;color:var(--light)">${r.u}</span></div>
+        <div style="font-size:10px;color:var(--mid)">${r.reason}</div></div></div>`;
+    }).join('');
+
+    statusEl.innerHTML = `
+      <div class="alert-b" style="background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.3);color:#4ade80;margin-bottom:14px">
+        ✅ Scanned <strong>${file.name}</strong> — <strong>${updatedCount}</strong> items matched. Order calculated. Adjust below if needed.
+      </div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--white);margin-bottom:10px;letter-spacing:.5px">📋 GENERATED SYSCO ORDER</div>
+      ${summaryRows}`;
+    clearBtn.style.display = 'inline-flex';
+
+  } catch (err) {
+    console.error('handleOrderUpload error:', err);
+    progressW.style.display = 'none';
+    statusEl.innerHTML = `<div class="alert-b" style="border-color:rgba(220,38,38,.3);color:#ff6b6b">❌ Error: ${err.message}</div>`;
+    clearBtn.style.display = 'inline-flex';
   }
 }
+
+// ── Inventory text parser ─────────────────────────────────────────────────────
+function parseInventoryText(text) {
+  const result = {};
+  const lines  = text.split(/\n/).map(l => l.trim()).filter(Boolean);
+  const lower  = text.toLowerCase();
+
+  SYSCO_CATALOGUE.forEach(item => {
+    let found = false;
+    for (const kw of item.keys) {
+      if (!lower.includes(kw)) continue;
+      for (const line of lines) {
+        if (!line.toLowerCase().includes(kw)) continue;
+        const numMatch = line.match(/(\d+(?:\.\d+)?)/);
+        if (numMatch) {
+          const qty = parseFloat(numMatch[1]);
+          if (qty >= 0 && qty < 1000) { result[item.n] = qty; found = true; break; }
+        }
+      }
+      if (found) break;
+    }
+  });
+  return result;
+}
+
+// ── Sysco order rule engine ───────────────────────────────────────────────────
+function generateSyscoOrder(inventoryFound) {
+  return SYSCO_CATALOGUE.map(item => {
+    const currentQty = inventoryFound.hasOwnProperty(item.n) ? inventoryFound[item.n] : null;
+    let orderQty, stockLevel, reason;
+
+    if (currentQty === null) {
+      orderQty = item.b; stockLevel = 'unknown'; reason = 'Not found — using standard qty';
+    } else if (currentQty === 0) {
+      orderQty = Math.ceil(item.b * 1.5); stockLevel = 'low'; reason = 'Out of stock — ordering extra';
+    } else if (currentQty <= item.par) {
+      orderQty = item.b; stockLevel = 'low'; reason = `Below par (${item.par}) — full restock`;
+    } else if (currentQty < item.b) {
+      orderQty = Math.max(1, item.b - Math.floor(currentQty)); stockLevel = 'medium'; reason = `${currentQty} on hand — topping up`;
+    } else if (currentQty < item.b * 1.5) {
+      orderQty = Math.ceil(item.b * 0.4); stockLevel = 'ok'; reason = 'Good stock — light reorder';
+    } else {
+      orderQty = 0; stockLevel = 'ok'; reason = `Well stocked (${currentQty}) — skip`;
+    }
+
+    return { n: item.n, u: item.u, currentQty, orderQty, stockLevel, reason, found: currentQty !== null };
+  }).filter(r => r.orderQty > 0);
+}
+
 
 // ── ORDERS ──────────────────────────────────────
 const ORDS=[
