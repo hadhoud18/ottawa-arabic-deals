@@ -402,7 +402,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <!-- MANUAL / AUTO-FILLED FIELDS -->
     <div class="form-row one"><div class="fg"><label>Product Name</label><input type="text" id="ap-name" placeholder="Auto-filled from scan or type manually"></div></div>
     <div class="form-row"><div class="fg"><label>Expiry Date</label><input type="date" id="ap-exp"></div><div class="fg"><label>Quantity</label><input type="number" id="ap-qty" value="1" min="1"></div></div>
-    <div class="form-row one"><div class="fg"><label>Category</label><select id="ap-cat"><option>Chicken</option><option>Sauces</option><option>Sides</option><option>Beverages</option><option>Packaging</option><option>Other</option></select></div></div>
+    <div class="form-row one"><div class="fg"><label>Category</label><select id="ap-cat"><option>Chicken</option><option>Sauces</option><option>Sides</option><option>Dry Food</option><option>Bread</option><option>Produce</option><option>Beverages</option><option>Packaging</option><option>Other</option></select></div></div>
     <button class="btn btn-p" style="width:100%;justify-content:center;margin-top:8px" onclick="addProduct()">✅ Add Product</button>
   </div>
 </div>
@@ -1697,38 +1697,216 @@ async function autoSchedule() {
 // ── PRODUCT LABEL SCANNER ────────────────────────
 // ── PRODUCT LABEL SCANNER (Tesseract.js — 100% free, no API) ────────────────
 
-// KFC product catalogue for fuzzy name matching
+// ── KFC 1416 Product Catalogue — built from live inventory (820 report Apr 2026) ──
+// Each entry: name (display), keywords (OCR-match strings, longest/most-specific first),
+//             aliases (common abbreviations / OCR noise variants), category.
 const KFC_PRODUCTS = [
-  { name:'Whole Chicken',        keywords:['whole chicken','roaster','raw chicken','fresh chicken'],          category:'Chicken'   },
-  { name:'Chicken Breast',       keywords:['breast','chicken breast','boneless breast','breast fillet'],       category:'Chicken'   },
-  { name:'Chicken Wings',        keywords:['wing','wings','chicken wing'],                                     category:'Chicken'   },
-  { name:'Chicken Tenders',      keywords:['tender','tenders','strip','strips','chicken tender','chicken strip'],category:'Chicken'  },
-  { name:'Chicken Thighs',       keywords:['thigh','thighs','chicken thigh'],                                  category:'Chicken'   },
-  { name:'Chicken Legs',         keywords:['leg','legs','drumstick','drumsticks'],                             category:'Chicken'   },
-  { name:'Ground Beef',          keywords:['ground beef','beef','hamburger'],                                  category:'Chicken'   },
-  { name:'Frying Oil',           keywords:['frying oil','canola oil','vegetable oil','shortening','oil'],      category:'Sides'     },
-  { name:'Batter Mix',           keywords:['batter','batter mix','coating','flour mix','seasoned flour'],      category:'Sides'     },
-  { name:'Gravy Mix',            keywords:['gravy','gravy mix','brown gravy','sauce mix'],                     category:'Sauces'    },
-  { name:'Coleslaw Mix',         keywords:['coleslaw','slaw','cole slaw','cabbage mix'],                       category:'Sides'     },
-  { name:'Poutine Fries',        keywords:['fries','poutine','french fries','potato','frozen fries'],          category:'Sides'     },
-  { name:'Sandwich Buns',        keywords:['bun','buns','sandwich bun','roll','bread roll','brioche'],         category:'Sides'     },
-  { name:'Ketchup',              keywords:['ketchup','tomato sauce','catsup'],                                 category:'Sauces'    },
-  { name:'Mayonnaise',           keywords:['mayo','mayonnaise','hellmann'],                                    category:'Sauces'    },
-  { name:'BBQ Sauce',            keywords:['bbq','barbeque','barbecue sauce'],                                 category:'Sauces'    },
-  { name:'Hot Sauce',            keywords:['hot sauce','sriracha','frank','tabasco','chili sauce'],            category:'Sauces'    },
-  { name:'Drink Cups',           keywords:['cup','cups','drink cup','beverage cup','large cup','medium cup'],  category:'Packaging' },
-  { name:'Napkins',              keywords:['napkin','napkins','tissue','serviette'],                           category:'Packaging' },
-  { name:'Takeout Bags',         keywords:['bag','bags','takeout bag','paper bag','carry bag'],                category:'Packaging' },
-  { name:'Food Containers',      keywords:['container','box','chicken box','meal box','bucket'],               category:'Packaging' },
-  { name:'Plastic Lids',         keywords:['lid','lids','plastic lid','cup lid'],                             category:'Packaging' },
-  { name:'Straws',               keywords:['straw','straws'],                                                 category:'Packaging' },
-  { name:'Pepsi',                keywords:['pepsi','diet pepsi','pepsi cola'],                                 category:'Beverages' },
-  { name:'7UP',                  keywords:['7up','seven up','sprite'],                                        category:'Beverages' },
-  { name:'Mountain Dew',         keywords:['mountain dew','mtn dew'],                                        category:'Beverages' },
-  { name:'Lipton Iced Tea',      keywords:['lipton','iced tea','tea'],                                        category:'Beverages' },
-  { name:'Salt',                 keywords:['salt','sodium chloride','table salt'],                            category:'Sides'     },
-  { name:'Pepper',               keywords:['pepper','black pepper','ground pepper'],                          category:'Sides'     },
-  { name:'Seasoning Mix',        keywords:['seasoning','spice mix','herbs','11 herbs','original recipe'],      category:'Sides'     },
+
+  // ── CHICKEN (Cooler & Freezer) ──────────────────────────────────────────────
+  { name:'Chicken Whole (Inventory)',   keywords:['chicken whole','whole chicken','whole inventory','raw chicken whole'],                                               aliases:['whole','24pc bag','7/24pc'],          category:'Chicken' },
+  { name:'Chicken Drums & Thighs',      keywords:['drums and thighs','drums thighs','dark meat','12 cut','drum thigh','drumstick thigh'],                              aliases:['dark','drums','thighs','12cut'],       category:'Chicken' },
+  { name:'Buttermilk Fillet FCCS',      keywords:['buttermilk fillet','buttermilk','fccs fillet','fillet fccs','bm fillet'],                                           aliases:['bm fill','bttrmlk','15ea'],           category:'Chicken' },
+  { name:'Chicken Tenders',             keywords:['chicken tenders','tenders','chicken strips','tender strips','crispy tenders'],                                      aliases:['tndr','32ea'],                        category:'Chicken' },
+  { name:'Wings Hot',                   keywords:['wings hot','hot wings','kfc wings','buffalo wings','wing hot'],                                                     aliases:['40ea wing','hot wng'],                category:'Chicken' },
+  { name:'Popcorn Chicken',             keywords:['popcorn chicken','popcorn','pop corn chicken'],                                                                     aliases:['popcorn chkn','2kg popcorn'],         category:'Chicken' },
+  { name:'Sandwich Crunch',             keywords:['sandwich crunch','crunch sandwich','crispy sandwich','crunch fillet'],                                              aliases:['sand crunch','15ea crunch'],          category:'Chicken' },
+  { name:'Sandwich Zinger Fillet',      keywords:['sandwich zinger','zinger fillet','zinger sandwich','zinger'],                                                      aliases:['zngr','16ea zinger'],                 category:'Chicken' },
+  { name:'Plant Based Sand Fillet',     keywords:['plant based','plant fillet','plant sandwich','vegetarian fillet','beyond'],                                         aliases:['plt based','plant'],                  category:'Chicken' },
+  { name:'Crispy Strips FTF',           keywords:['crispy strips ftf','ftf strips','crispy strip','flat to fry'],                                                      aliases:['ftf','crispy strip'],                 category:'Chicken' },
+  { name:'WED Chicken Order',           keywords:['wed chicken','wednesday chicken','501 wed'],                                                                        aliases:['501','wed chkn'],                     category:'Chicken' },
+  { name:'WED Dark Meat Order',         keywords:['wed dark','wednesday dark','502 wed'],                                                                              aliases:['502','wed dark'],                     category:'Chicken' },
+  { name:'FRI Chicken Order',           keywords:['fri chicken','friday chicken','505 fri'],                                                                           aliases:['505','fri chkn'],                     category:'Chicken' },
+  { name:'FRI Dark Meat Order',         keywords:['fri dark','friday dark','506 fri'],                                                                                 aliases:['506','fri dark'],                     category:'Chicken' },
+  { name:'MON Chicken Order',           keywords:['mon chicken','monday chicken','509 mon'],                                                                           aliases:['509','mon chkn'],                     category:'Chicken' },
+  { name:'MON Dark Meat Order',         keywords:['mon dark','monday dark','510 mon'],                                                                                 aliases:['510','mon dark'],                     category:'Chicken' },
+
+  // ── SIDES & FROZEN FOOD ──────────────────────────────────────────────────────
+  { name:'French Fries',                keywords:['french fries','fries','frozen fries','kfc fries','bag fries','3kg fries'],                                          aliases:['fry','frys','frites'],                category:'Sides' },
+  { name:'TB French Fries (Nacho)',      keywords:['tb french fries nacho','nacho fry','taco bell fries','tb fries'],                                                  aliases:['nacho fries','tb fry'],               category:'Sides' },
+  { name:'Onion Rings',                  keywords:['onion rings','onion ring','fried onion ring'],                                                                     aliases:['onion rng','51ea rings'],             category:'Sides' },
+  { name:'Corn Frozen',                  keywords:['corn frozen','frozen corn','corn cob','corn'],                                                                     aliases:['corn','3kg corn'],                    category:'Sides' },
+  { name:'Salad Coleslaw',              keywords:['coleslaw','cole slaw','slaw salad','kfc coleslaw'],                                                                 aliases:['slaw','coleslaw'],                    category:'Sides' },
+  { name:'Salad Macaroni',              keywords:['macaroni salad','mac salad','macaroni','pasta salad'],                                                              aliases:['mac sal','5kg mac'],                  category:'Sides' },
+  { name:'Cheese Curds',               keywords:['cheese curds','cheese curd','curd cheese'],                                                                         aliases:['curds','chz curd'],                   category:'Sides' },
+  { name:'KD Mac & Cheese Noodles',     keywords:['kd mac cheese','mac cheese noodles','kraft dinner','kd noodle','mac and cheese'],                                   aliases:['kd','mac chz'],                       category:'Sides' },
+  { name:'Crispy Jalapeno Pieces',       keywords:['crispy jalapeno','jalapeno pieces','jalapeno kfc','jalapen'],                                                      aliases:['jalapeno','jalpno'],                  category:'Sides' },
+  { name:'Crispy Pickles',              keywords:['crispy pickles','fried pickles','pickle chips','breaded pickle'],                                                   aliases:['crs pickle','1lb pickles'],           category:'Sides' },
+  { name:'Breaded Pickle Chips',        keywords:['breaded pickle chips','pickle chips breaded','breaded pickle'],                                                     aliases:['bread pickle'],                       category:'Sides' },
+  { name:'Crispy Onions',              keywords:['crispy onions','fried onions','crunchy onions'],                                                                     aliases:['crspy onion','6/24oz'],               category:'Sides' },
+  { name:'Caramelized Onions',          keywords:['caramelized onions','caramelised onions','sweet onions'],                                                           aliases:['caramel onion'],                      category:'Sides' },
+  { name:'S\'mores Brownies',           keywords:['smores brownies','smore brownie','smores bar','brownie'],                                                           aliases:['smores','brownie'],                   category:'Sides' },
+  { name:'Chocolate Chunk Cookies',     keywords:['chocolate chunk cookie','choc chip cookie','cookie','chocolate cookie'],                                            aliases:['cookie','choc cookie'],               category:'Sides' },
+
+  // ── BREADS & BUNS ────────────────────────────────────────────────────────────
+  { name:'Bun Potato Glazed',           keywords:['bun potato glazed','potato bun','glazed bun','potato glazed bun'],                                                  aliases:['pot bun','12ea bun'],                 category:'Bread' },
+  { name:'Bun Slider',                  keywords:['bun slider','slider bun','mini bun','small bun'],                                                                   aliases:['slider','12/12ea'],                   category:'Bread' },
+  { name:'TB Tortilla 10.25"',          keywords:['tortilla 10','tb tortilla 10.25','large tortilla','10 inch tortilla','flour tortilla 10'],                          aliases:['tort 10','26ea tort'],                category:'Bread' },
+  { name:'TB Tortilla 6.5"',            keywords:['tortilla 6','tb tortilla 6.5','small tortilla','6 inch tortilla','flour tortilla 6'],                               aliases:['tort 6','small tort'],                category:'Bread' },
+
+  // ── SAUCES & CONDIMENTS ──────────────────────────────────────────────────────
+  { name:'Dip BBQ',                     keywords:['dip bbq','bbq dip','bbq sauce','barbeque dip','bbq packet'],                                                        aliases:['bbq','barbeque'],                     category:'Sauces' },
+  { name:'Dip Buttermilk Ranch',        keywords:['dip buttermilk ranch','buttermilk ranch','ranch dip','ranch sauce','buttermilk dip'],                               aliases:['ranch','bttmlk ranch'],               category:'Sauces' },
+  { name:'Dip Honey Mustard',           keywords:['dip honey mustard','honey mustard sauce','honey mustard dip','honey mustard'],                                      aliases:['honey mstrd','hny must'],             category:'Sauces' },
+  { name:'Dip Plum Sauce',             keywords:['dip plum sauce','plum sauce','plum dip'],                                                                            aliases:['plum'],                               category:'Sauces' },
+  { name:'Dip Supercharger',           keywords:['dip supercharger','supercharger sauce','supercharger dip','supercharge'],                                            aliases:['superchgr','super chg'],              category:'Sauces' },
+  { name:'Dip Mikes Hot Honey',        keywords:['dip mikes hot honey','mike hot honey','mikes honey','hot honey dip','mike\'s hot'],                                  aliases:['mikes honey','hot honey'],            category:'Sauces' },
+  { name:'Sauce Bottle Mike Hot Honey',keywords:['sauce bottle mike hot honey','mike honey bottle','hot honey bottle'],                                                aliases:['honey bottle'],                       category:'Sauces' },
+  { name:'Hot Sauce Packets',          keywords:['packets hot sauce','hot sauce packet','hot sauce cs','hot sauce 500'],                                               aliases:['hot pkt','500ea hot'],                category:'Sauces' },
+  { name:'Packets Ketchup',            keywords:['packets ketchup','ketchup packet','ketchup cs','ketchup 1500'],                                                      aliases:['ketchup','kcthup pkt'],               category:'Sauces' },
+  { name:'Packets Vinegar',            keywords:['packets vinegar','vinegar packet','vinegar cs'],                                                                     aliases:['vinegar pkt'],                        category:'Sauces' },
+  { name:'Sauce Buttery ETC FCCS',     keywords:['sauce buttery etc fccs','buttery sauce','buttery etc','fccs buttery'],                                               aliases:['buttery sauce','90gm pouch'],          category:'Sauces' },
+  { name:'Gravy Base KFC',             keywords:['gravy base kfc','kfc gravy','gravy base','gravy mix','gravy pk'],                                                    aliases:['gravy','kfc gravy base'],             category:'Sauces' },
+  { name:'Pouch Mayo Vegan',           keywords:['pouch mayo vegan','vegan mayo','mayo vegan','plant mayo'],                                                           aliases:['vegan mayo','32oz mayo'],             category:'Sauces' },
+  { name:'Pouch Pepper Mayo',          keywords:['pouch pepper mayo','pepper mayo','peppered mayo'],                                                                   aliases:['pepper mayo','24oz mayo'],            category:'Sauces' },
+  { name:'Pouch Sauce Spicy Mayo',     keywords:['pouch sauce spicy mayo','spicy mayo','sriracha mayo','sauce spicy mayo'],                                            aliases:['spicy mayo'],                         category:'Sauces' },
+  { name:'Pouch Mayo Light',           keywords:['pouch mayo light','light mayo','low fat mayo','mayo light'],                                                         aliases:['lite mayo','light mayo'],             category:'Sauces' },
+  { name:'Mayo Chili',                 keywords:['mayo chili','chili mayo','chipotle mayo'],                                                                           aliases:['chili mayo','8/16oz'],                category:'Sauces' },
+  { name:'Sauce Zinger Drip',          keywords:['sauce zinger drip','zinger drip sauce','zinger sauce drip'],                                                        aliases:['zngr drip'],                          category:'Sauces' },
+  { name:'Sauce KFC Alfredo',          keywords:['sauce kfc alfredo','alfredo sauce','kfc alfredo'],                                                                   aliases:['alfredo'],                            category:'Sauces' },
+  { name:'Sauce Cranberry',            keywords:['sauce cranberry','cranberry sauce','cranberry'],                                                                     aliases:['cranberry'],                          category:'Sauces' },
+  { name:'OR Buttery Glaze',           keywords:['or buttery glaze','buttery glaze','original recipe buttery','or glaze'],                                             aliases:['buttery glaze','24oz glaze'],          category:'Sauces' },
+  { name:'Pickles Sweet',              keywords:['pickles sweet','sweet pickle','sweet pickles jar','pickled cucumber'],                                               aliases:['sweet pickle','250ea jar'],           category:'Sauces' },
+
+  // ── FLOURS, BREADING & SEASONINGS ───────────────────────────────────────────
+  { name:'Breading Mix Milk & Egg',    keywords:['breading mix milk egg','milk egg breading','milk and egg mix','breading mix'],                                       aliases:['milk egg mix','brd mix'],             category:'Dry Food' },
+  { name:'Flour Crispy Breading',      keywords:['flour crispy breading','crispy breading flour','crispy flour','kfc flour crispy'],                                   aliases:['crispy flour','5bag flour'],          category:'Dry Food' },
+  { name:'Flour Org Recipe (Milk & Egg)',keywords:['flour org recipe','original recipe flour','org recipe milk egg','or flour','original recipe milk'],                aliases:['or flour','8kg flour'],               category:'Dry Food' },
+  { name:'Seasoning Extra Tasty Crispy',keywords:['seasoning extra tasty crispy','etc seasoning','extra tasty crispy seasoning','etc spice','etc season'],             aliases:['etc','9.1oz season'],                 category:'Dry Food' },
+  { name:'Seasoning Hot & Spicy Marinade ETC',keywords:['seasoning hot and spicy','hot spicy marinade etc','hot spicy etc','marinade etc'],                            aliases:['hot spicy etc'],                      category:'Dry Food' },
+  { name:'Marinade Hot & Spicy',       keywords:['marinade hot spicy','hot spicy marinade','hot and spicy marinade'],                                                  aliases:['hot spicy marn','24oz marinade'],     category:'Dry Food' },
+  { name:'French Fry Seasoning',       keywords:['french fry seasoning','fry seasoning','fries seasoning','potato seasoning'],                                         aliases:['fry season','2lb season'],            category:'Dry Food' },
+  { name:'KFC Chili Seasoning Oil',    keywords:['kfc chili seasoning oil','chili seasoning oil','chili oil kfc','chili season'],                                      aliases:['chili oil','4.59oz'],                 category:'Dry Food' },
+  { name:'Pickle Seasoning',           keywords:['pickle seasoning','pickles seasoning'],                                                                              aliases:['pickle season'],                      category:'Dry Food' },
+  { name:'Pickle Brine',               keywords:['pickle brine','brine pickle','pickling brine'],                                                                     aliases:['brine'],                              category:'Dry Food' },
+  { name:'Seasoning Stuffing',         keywords:['seasoning stuffing','stuffing mix','stuffing seasoning'],                                                            aliases:['stuffing'],                           category:'Dry Food' },
+  { name:'Low Sodium Seasoning',       keywords:['low sodium seasoning','low sodium','sodium reduced seasoning'],                                                      aliases:['low sodium'],                         category:'Dry Food' },
+  { name:'Canola Oil KFC',             keywords:['canola oil kfc','kfc canola oil','canola oil','frying oil','vegetable oil','pail oil'],                              aliases:['canola','35lb pail','oil pail'],       category:'Dry Food' },
+  { name:'Salt Packet',                keywords:['salt packet','salt packets','table salt'],                                                                           aliases:['salt pkt','6000ea salt'],             category:'Dry Food' },
+  { name:'Pepper Packet',              keywords:['pepper packet','pepper packets','black pepper packet'],                                                              aliases:['pepper pkt','6000ea pepper'],         category:'Dry Food' },
+
+  // ── PRODUCE & DAIRY ──────────────────────────────────────────────────────────
+  { name:'Produce Shredded Lettuce',   keywords:['produce shredded lettuce','shredded lettuce','lettuce shredded','fresh lettuce'],                                    aliases:['lettuce','32oz lettuce'],             category:'Produce' },
+  { name:'Produce KFC Tomatoes',       keywords:['produce kfc tomatoes','kfc tomatoes','fresh tomatoes','tomato'],                                                     aliases:['tomato','5lb tomato'],                category:'Produce' },
+  { name:'Cheese Slices (MonJack/Ched)',keywords:['cheese slices','monterey jack','cheddar cheese','cheese slice','monjack'],                                          aliases:['cheese','chz slice'],                 category:'Produce' },
+
+  // ── BEVERAGES (BIB Syrups) ──────────────────────────────────────────────────
+  { name:'Soda Pepsi 20LT BIB',        keywords:['soda pepsi 20lt bib','pepsi 20lt','pepsi bib 20','20 litre pepsi bib'],                                             aliases:['pepsi 20l','pepsi bib'],              category:'Beverages' },
+  { name:'Soda Diet Pepsi 12LT BIB',   keywords:['soda diet pepsi 12lt bib','diet pepsi 12lt','diet pepsi bib','diet pepsi syrup'],                                   aliases:['diet pepsi bib'],                     category:'Beverages' },
+  { name:'Soda Pepsi Zero 12LT BIB',   keywords:['soda pepsi zero 12lt bib','pepsi zero bib','pepsi zero 12lt'],                                                      aliases:['pepsi zero bib'],                     category:'Beverages' },
+  { name:'Soda 7UP 12LT BIB',          keywords:['soda 7up 12lt bib','7up bib','seven up bib','7up syrup'],                                                           aliases:['7up bib'],                            category:'Beverages' },
+  { name:'Soda Mountain Dew 12LT BIB', keywords:['soda mountain dew 12lt bib','mountain dew bib','mtn dew bib','dew syrup'],                                          aliases:['mtn dew bib'],                        category:'Beverages' },
+  { name:'Soda Root Beer 12LT BIB',    keywords:['soda root beer 12lt bib','root beer bib','rootbeer syrup'],                                                         aliases:['root beer bib'],                      category:'Beverages' },
+  { name:'Soda Tea Iced 12LT BIB',     keywords:['soda tea iced 12lt bib','iced tea bib','tea bib','iced tea syrup'],                                                 aliases:['iced tea bib'],                       category:'Beverages' },
+  { name:'Soda Lemonade 12LT BIB',     keywords:['soda lemonade 12lt bib','lemonade bib','lemonade syrup'],                                                           aliases:['lemonade bib'],                       category:'Beverages' },
+  { name:'Soda Dr Pepper 12LT BIB',    keywords:['soda dr pepper 12lt bib','dr pepper bib','doctor pepper bib'],                                                      aliases:['dr pepper bib'],                      category:'Beverages' },
+  { name:'Cylinder CO2',               keywords:['cylinder co2','co2 cylinder','carbon dioxide','co2 tank','co2 deposit'],                                             aliases:['co2','carbon dioxide'],              category:'Beverages' },
+
+  // ── BEVERAGES (Bottles/Cans — Pepsi Cooler) ─────────────────────────────────
+  { name:'Soda Pepsi 591 ML',          keywords:['soda pepsi 591','pepsi 591','pepsi bottle','591ml pepsi'],                                                          aliases:['pepsi btl','591 pepsi'],              category:'Beverages' },
+  { name:'Soda Pepsi 2L',              keywords:['soda pepsi 2l','pepsi 2 litre','pepsi two litre','2l pepsi'],                                                       aliases:['pepsi 2l'],                           category:'Beverages' },
+  { name:'Soda Diet Pepsi 591 ML',     keywords:['soda diet pepsi 591','diet pepsi 591','diet pepsi bottle'],                                                         aliases:['diet pepsi btl'],                     category:'Beverages' },
+  { name:'Soda Diet Pepsi 2L',         keywords:['soda diet pepsi 2l','diet pepsi 2 litre'],                                                                          aliases:['diet pepsi 2l'],                      category:'Beverages' },
+  { name:'Soda Pepsi Zero 591 ML',     keywords:['soda pepsi zero 591','pepsi zero 591','pepsi zero bottle'],                                                         aliases:['pepsi zero btl'],                     category:'Beverages' },
+  { name:'Soda 7UP 591 ML',            keywords:['soda 7up 591','7up 591','7up bottle'],                                                                              aliases:['7up btl','591 7up'],                  category:'Beverages' },
+  { name:'Soda 7UP 2L',               keywords:['soda 7up 2l','7up 2 litre'],                                                                                        aliases:['7up 2l'],                             category:'Beverages' },
+  { name:'Soda Mountain Dew 355 ML',   keywords:['soda mountain dew 355','mountain dew 355','mtn dew can','mountain dew can'],                                        aliases:['mtn dew can','dew 355'],              category:'Beverages' },
+  { name:'Soda Tea Iced 591 ML',       keywords:['soda tea iced 591','iced tea 591','iced tea bottle'],                                                               aliases:['iced tea btl'],                       category:'Beverages' },
+  { name:'Soda Tea Iced 2L',          keywords:['soda tea iced 2l','iced tea 2 litre'],                                                                               aliases:['iced tea 2l'],                        category:'Beverages' },
+  { name:'Soda Root Beer 591 ML',      keywords:['soda root beer mug 591','root beer 591','root beer bottle','mug root beer'],                                        aliases:['root beer btl'],                      category:'Beverages' },
+  { name:'Soda 7UP 355 ML (Can)',      keywords:['soda 7up 355','7up 355','7up can','seven up can'],                                                                  aliases:['7up can','355 7up'],                  category:'Beverages' },
+  { name:'Soda Diet Pepsi 355 ML (Can)',keywords:['soda diet pepsi 355','diet pepsi 355','diet pepsi can'],                                                            aliases:['diet pepsi can'],                     category:'Beverages' },
+  { name:'Soda Pepsi 355 ML (Can)',    keywords:['soda pepsi 355','pepsi 355','pepsi can'],                                                                           aliases:['pepsi can','355 pepsi'],              category:'Beverages' },
+  { name:'Soda Tea Iced 355 ML (Can)', keywords:['soda tea iced 355','iced tea 355','iced tea can'],                                                                  aliases:['iced tea can'],                       category:'Beverages' },
+  { name:'Bubly Blackberry Can',       keywords:['bubly blackberry','blackberry bubly','bubly sparkling','blackberry can'],                                            aliases:['bubly black'],                        category:'Beverages' },
+  { name:'Bubly Lime Can',             keywords:['bubly lime','lime bubly','lime sparkling water'],                                                                    aliases:['bubly lime'],                         category:'Beverages' },
+  { name:'Bottled Water 591ML',        keywords:['bottled water 591','water 591','water bottle','drinking water'],                                                     aliases:['water btl','591 water'],              category:'Beverages' },
+  { name:'Juice Apple 450 ML',         keywords:['juice apple 450','apple juice','apple juice 450'],                                                                   aliases:['apple juice'],                        category:'Beverages' },
+  { name:'Juice Orange 450 ML',        keywords:['juice orange 450','orange juice','oj 450'],                                                                         aliases:['orange juice','oj'],                  category:'Beverages' },
+
+  // ── CUPS & LIDS (Dry Storage Paper) ─────────────────────────────────────────
+  { name:'Cup 20 OZ Drink',            keywords:['cup 20 oz drink','20oz drink cup','20 ounce cup','20oz cup'],                                                        aliases:['20oz cup','cup 20'],                  category:'Packaging' },
+  { name:'Lid 20 OZ Cup',              keywords:['lid 20 oz cup','20oz lid','lid 20oz','20 oz lid'],                                                                   aliases:['20oz lid'],                           category:'Packaging' },
+  { name:'Cup 32 OZ Drink',            keywords:['cup 32 oz drink','32oz drink cup','32oz cup','32 ounce cup'],                                                        aliases:['32oz cup','cup 32'],                  category:'Packaging' },
+  { name:'Lid 32 OZ Cup',              keywords:['lid 32 oz cup','32oz lid','32 oz lid'],                                                                              aliases:['32oz lid'],                           category:'Packaging' },
+  { name:'Cup 100 ML',                 keywords:['cup 100 ml','100ml cup','100 ml portion cup','small cup 100'],                                                       aliases:['100ml cup','cup 100'],                category:'Packaging' },
+  { name:'Lid 100 ML Vented',          keywords:['lid 100 ml vented','100ml lid vented','vented lid 100','100ml vented lid'],                                          aliases:['100ml lid','vented lid'],             category:'Packaging' },
+  { name:'Go Bucket Cups',             keywords:['go bucket cups','go bucket','go cup','go-bucket cup'],                                                               aliases:['go cup','50ea go'],                   category:'Packaging' },
+  { name:'Go Bucket Lids',             keywords:['go bucket lids','go lid','go-bucket lid','go bucket cover'],                                                        aliases:['go lid'],                             category:'Packaging' },
+  { name:'Scoop Cup #4',               keywords:['scoop cup 4','scoop cup #4','scoop cup number 4','#4 scoop'],                                                        aliases:['scoop 4','50ea scoop'],               category:'Packaging' },
+  { name:'Scoop Cup #7',               keywords:['scoop cup 7','scoop cup #7','scoop cup number 7','#7 scoop'],                                                        aliases:['scoop 7'],                            category:'Packaging' },
+  { name:'Cup Clear 16OZ',             keywords:['cup clear 16oz','clear 16 oz cup','16oz clear cup','clear cup 16'],                                                  aliases:['clear cup','16oz clear'],             category:'Packaging' },
+  { name:'Lids For Cup Clear 16OZ',    keywords:['lids for cup clear 16oz','clear cup lid 16','16oz clear lid'],                                                      aliases:['clear lid 16'],                       category:'Packaging' },
+  { name:'Cup Portion Plastic Clear 2OZ',keywords:['cup portion plastic clear 2oz','portion cup 2oz','2oz portion cup','plastic portion cup'],                         aliases:['2oz cup','portion cup'],              category:'Packaging' },
+  { name:'Lid Portion 2OZ',            keywords:['lid portion 2oz','portion lid 2oz','2oz lid portion'],                                                              aliases:['2oz lid'],                            category:'Packaging' },
+  { name:'Bowl 16 OZ',                 keywords:['bowl 16 oz','16oz bowl','16 ounce bowl','food bowl'],                                                               aliases:['bowl 16','16oz bowl'],                category:'Packaging' },
+  { name:'Lid Bowls',                  keywords:['lid bowls','bowl lid','lid for bowl','bowl cover'],                                                                  aliases:['bowl lid'],                           category:'Packaging' },
+  { name:'Cont Food 16OZ (Lg Sides)',  keywords:['cont food 16oz','food container 16','large sides container','16oz container lg sides'],                              aliases:['16oz cont','lg sides cont'],          category:'Packaging' },
+  { name:'Lid Cont 16OZ (Lg Sides)',   keywords:['lid cont 16oz','container lid 16','large sides lid','16oz lid cont'],                                               aliases:['lg sides lid'],                       category:'Packaging' },
+  { name:'LG Fry Pod Cont',            keywords:['lg fry pod cont','fry pod container','large fry pod','fry pod','fry container'],                                     aliases:['fry pod','600ea'],                    category:'Packaging' },
+
+  // ── BOXES & BUCKETS ──────────────────────────────────────────────────────────
+  { name:'Box Mini #1 Carton',         keywords:['box mini 1 carton','mini box carton','#1 carton','carton 1','box 1'],                                                aliases:['mini box','box 1','#1 box'],          category:'Packaging' },
+  { name:'Box Medium #2 Carton',       keywords:['box medium 2 carton','medium box carton','#2 carton','carton 2','box 2'],                                            aliases:['medium box','box 2','#2 box'],        category:'Packaging' },
+  { name:'Box Regular #3 Carton',      keywords:['box regular 3 carton','regular box carton','#3 carton','carton 3','box 3'],                                          aliases:['regular box','box 3','#3 box'],       category:'Packaging' },
+  { name:'Box Jumbo #4 Carton',        keywords:['box jumbo 4 carton','jumbo box carton','#4 carton','carton 4','box 4','jumbo carton'],                               aliases:['jumbo box','box 4','#4 box'],         category:'Packaging' },
+  { name:'Bucket 6 LB W/Lid',         keywords:['bucket 6 lb','6lb bucket','6 pound bucket','bucket 6lb lid'],                                                        aliases:['6lb bucket','6lb pail'],              category:'Packaging' },
+  { name:'Bucket 8 LB W/Lid',         keywords:['bucket 8 lb','8lb bucket','8 pound bucket','bucket 8lb lid'],                                                        aliases:['8lb bucket','8lb pail'],              category:'Packaging' },
+  { name:'Bucket 10 LB W/Lid',        keywords:['bucket 10 lb','10lb bucket','10 pound bucket','bucket 10lb lid'],                                                    aliases:['10lb bucket','10lb pail'],            category:'Packaging' },
+  { name:'Bucket 54 OZ W/Lid (Chicken Share)',keywords:['bucket 54 oz','54oz bucket','chicken share bucket','54 ounce bucket','chickn share'],                        aliases:['54oz bucket','share bucket'],         category:'Packaging' },
+  { name:'Bucket LTO 54 OZ No Lid',   keywords:['bucket lto 54 oz','lto bucket','lto 54','54oz lto bucket'],                                                          aliases:['lto 54','lto bucket'],                category:'Packaging' },
+  { name:'Lid Bucket LTO 54 OZ',      keywords:['lid bucket lto 54 oz','lto bucket lid','lto 54 lid'],                                                                aliases:['lto lid'],                            category:'Packaging' },
+  { name:'LTO Clamshell',             keywords:['lto clamshell','clamshell lto','clamshell container','lto container'],                                               aliases:['clamshell','480ea'],                  category:'Packaging' },
+  { name:'Kids Bucket',               keywords:['kids bucket','kid bucket','kids meal bucket','kiddie bucket'],                                                        aliases:['kids bkt'],                           category:'Packaging' },
+
+  // ── BAGS & WRAPS ─────────────────────────────────────────────────────────────
+  { name:'Bag 3# Paper',              keywords:['bag 3 pound paper','3 lb paper bag','3lb bag','3# bag'],                                                              aliases:['3lb bag','3# bag'],                   category:'Packaging' },
+  { name:'Bag 10# Paper',             keywords:['bag 10 pound paper','10 lb paper bag','10lb bag','10# bag'],                                                          aliases:['10lb bag','10# bag'],                 category:'Packaging' },
+  { name:'Bag 50# Sacks Paper',       keywords:['bag 50 pound paper','50 lb sack','50lb bag','50# sack'],                                                              aliases:['50lb bag','50# sack'],                category:'Packaging' },
+  { name:'Bag Fry KFC Paper Small',   keywords:['bag fry kfc paper small','kfc fry bag small','small fry bag','kfc small fry paper'],                                  aliases:['sm fry bag','fry bag sm'],            category:'Packaging' },
+  { name:'Bag Fry Mega Paper',        keywords:['bag fry mega paper','mega fry bag','large fry bag','mega paper fry'],                                                 aliases:['mega fry bag','fry bag lg'],          category:'Packaging' },
+  { name:'Wrap Crispy Sub 12x12 Wax Paper',keywords:['wrap crispy sub 12x12','crispy sub wrap','12x12 wax paper','sub wrap wax'],                                      aliases:['sub wrap','12x12 wrap'],              category:'Packaging' },
+  { name:'Wrap Foil Sandwich 14x14 TW Insul',keywords:['wrap foil sandwich 14x14','foil sandwich wrap','14x14 foil','sandwich foil wrap'],                             aliases:['foil wrap','14x14 foil'],             category:'Packaging' },
+  { name:'Sand Sleeve Stacker/FCCS',  keywords:['sand sleeve stacker','sandwich sleeve stacker','fccs sleeve','stacker sleeve'],                                       aliases:['sand sleeve','stacker sleeve'],       category:'Packaging' },
+  { name:'Sleeve Plant Based Sandwich',keywords:['sleeve plant based sandwich','plant sandwich sleeve','plant based sleeve'],                                           aliases:['plant sleeve'],                       category:'Packaging' },
+
+  // ── DIVIDERS, CARRIERS & MISC ────────────────────────────────────────────────
+  { name:'2 Way Dividers (54OZ Bucket)',keywords:['2 way dividers 54oz','2way divider','two way divider bucket','54oz divider'],                                       aliases:['2 way div','divider 54'],             category:'Packaging' },
+  { name:'3 Way Divider (8LB Bucket)', keywords:['3 way divider 8lb','3way divider','three way divider bucket','8lb divider'],                                        aliases:['3 way div','divider 8lb'],            category:'Packaging' },
+  { name:'4 Cup Carrier',             keywords:['4 cup carrier','four cup carrier','cup carrier','drink carrier'],                                                     aliases:['cup carrier','4 cup'],                category:'Packaging' },
+  { name:'KFC Napkins',               keywords:['kfc napkins','napkins kfc','napkin kfc','kfc serviettes','paper napkins'],                                            aliases:['napkins','800ea napkin'],             category:'Packaging' },
+  { name:'Liner Tray',                keywords:['liner tray','tray liner','paper tray liner','tray paper'],                                                            aliases:['tray liner','1000ea liner'],          category:'Packaging' },
+  { name:'Plates 9" Foam',            keywords:['plates 9 foam','9 inch foam plate','foam plate 9','foam plates'],                                                    aliases:['foam plate','9in plate'],             category:'Packaging' },
+  { name:'Straw Wrapped',             keywords:['straw wrapped','wrapped straw','individual straw','paper straw'],                                                     aliases:['straw','500ea straw'],                category:'Packaging' },
+  { name:'Cutlery Fork Wrapped',      keywords:['cutlery fork wrapped','wrapped fork','plastic fork wrapped','fork cutlery'],                                          aliases:['fork','wrapped fork'],                category:'Packaging' },
+  { name:'Turtles Bar',               keywords:['turtles bar','turtle bar','turtles chocolate','turtle chocolate bar'],                                                aliases:['turtles'],                            category:'Dry Food' },
+  { name:'Cranberry Fizz Ball',       keywords:['cranberry fizz ball','cranberry fizz','fizz ball cranberry'],                                                        aliases:['fizz ball'],                          category:'Dry Food' },
+];
+
+// ── Shared abbrev/noise corrections applied before matching ──────────────────
+const OCR_CORRECTIONS = [
+  [/\bkfc\b/gi,'kfc'],
+  [/btrmlk|bttrmlk|buttermk/gi,'buttermilk'],
+  [/fccs/gi,'fccs'],
+  [/mtn\s*dew/gi,'mountain dew'],
+  [/dr\.?\s*pep/gi,'dr pepper'],
+  [/rnch/gi,'ranch'],
+  [/mstrd/gi,'mustard'],
+  [/chkn/gi,'chicken'],
+  [/chx/gi,'chicken'],
+  [/ckn/gi,'chicken'],
+  [/\bpeppr\b/gi,'pepper'],
+  [/\bsalt\b/gi,'salt'],
+  [/lrg|lg\b/gi,'large'],
+  [/sm\b/gi,'small'],
+  [/wng/gi,'wing'],
+  [/tndr/gi,'tender'],
+  [/marn/gi,'marinade'],
+  [/snack\s*box/gi,'box'],
+  [/pail/gi,'bucket'],
+  [/btl/gi,'bottle'],
+  [/bib\b/gi,'bib'],
+  [/tortla/gi,'tortilla'],
+  [/tort\b/gi,'tortilla'],
 ];
 
 // Month name → number mapping for date parsing
@@ -2015,36 +2193,81 @@ function extractExpiryDate(text) {
 }
 
 // ── Product name matcher ──────────────────────────────────────────────────────
+// Multi-pass scoring engine:
+//  1. Apply OCR noise corrections
+//  2. Exact keyword substring match (highest weight)
+//  3. Alias / abbreviation match
+//  4. Multi-word partial token match
+//  5. Tie-break by keyword length (specificity)
 function matchProductName(ocrText) {
-  const lower = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ');
+  // ── Step 1: normalise + apply OCR corrections ────────────────────────────
+  let lower = ocrText.toLowerCase().replace(/[^a-z0-9\s#.\/]/g, ' ').replace(/\s+/g, ' ');
+  for (const [pattern, replacement] of OCR_CORRECTIONS) {
+    lower = lower.replace(pattern, replacement);
+  }
 
-  // Score each known product
-  let bestScore  = 0;
-  let bestMatch  = null;
+  const tokens = lower.split(' ').filter(t => t.length > 1);
+
+  let bestScore = 0;
+  let bestMatch = null;
 
   for (const prod of KFC_PRODUCTS) {
     let score = 0;
+
+    // ── Pass 1: exact keyword substring (weighted by length + bonus for long matches)
     for (const kw of prod.keywords) {
       if (lower.includes(kw)) {
-        // Longer keyword match = higher score
-        score = Math.max(score, kw.length * 2);
-      } else {
-        // Partial word match — check each word of keyword
-        const words = kw.split(' ');
-        const matchedWords = words.filter(w => w.length > 3 && lower.includes(w));
-        if (matchedWords.length > 0) {
-          score = Math.max(score, matchedWords.reduce((s,w) => s + w.length, 0));
+        const pts = kw.split(' ').length >= 3 ? kw.length * 4 : kw.length * 2;
+        score = Math.max(score, pts);
+      }
+    }
+
+    // ── Pass 2: alias match (treated as medium-confidence)
+    for (const al of (prod.aliases || [])) {
+      if (lower.includes(al)) {
+        const pts = al.length * 1.5;
+        score = Math.max(score, pts);
+      }
+    }
+
+    // ── Pass 3: multi-word token overlap across keywords
+    if (score < 10) {
+      for (const kw of prod.keywords) {
+        const kwWords = kw.split(' ').filter(w => w.length > 2);
+        const matched = kwWords.filter(w => tokens.includes(w));
+        if (matched.length >= 2) {
+          const pts = matched.reduce((s,w) => s + w.length, 0) * 1.2;
+          score = Math.max(score, pts);
+        } else if (matched.length === 1 && kwWords.length === 1) {
+          // Single-word keyword — single token match OK with minimum length guard
+          const w = matched[0];
+          if (w.length >= 5) score = Math.max(score, w.length * 0.9);
         }
       }
     }
+
+    // ── Pass 4: single important token fallback (long specific tokens only)
+    if (score < 6) {
+      const importantTokens = tokens.filter(t => t.length >= 6);
+      for (const kw of prod.keywords) {
+        for (const tok of importantTokens) {
+          if (kw.includes(tok)) {
+            score = Math.max(score, tok.length * 0.8);
+          }
+        }
+      }
+    }
+
     if (score > bestScore) {
       bestScore = score;
       bestMatch = prod;
     }
   }
 
-  // Require a minimum match confidence
-  return bestScore >= 5 ? bestMatch : null;
+  // Minimum confidence threshold: require a meaningful match
+  if (bestScore < 6) return null;
+  console.log(`Product match: "${bestMatch.name}" (score ${bestScore.toFixed(1)})`);
+  return bestMatch;
 }
 
 // ── PRODUCTS ────────────────────────────────────
